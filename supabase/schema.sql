@@ -112,3 +112,50 @@ CREATE TRIGGER set_profiles_updated_at
 CREATE INDEX IF NOT EXISTS idx_applications_user_id ON public.applications(user_id);
 CREATE INDEX IF NOT EXISTS idx_applications_created_at ON public.applications(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_profiles_stripe_customer ON public.profiles(stripe_customer_id);
+
+-- ============================================================
+-- JOB ALERTS TABLE
+-- Stores per-user job alert preferences
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.job_alerts (
+  id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id    UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  enabled    BOOLEAN DEFAULT TRUE NOT NULL,
+  platforms  TEXT[] DEFAULT ARRAY['stepstone','linkedin','indeed','willhaben','karriere'],
+  frequency  TEXT DEFAULT 'daily' CHECK (frequency IN ('instant','daily','weekly')),
+  created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+  UNIQUE (user_id)
+);
+
+ALTER TABLE public.job_alerts ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage own job alerts"
+  ON public.job_alerts FOR ALL
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+-- ============================================================
+-- ALERT HISTORY TABLE
+-- Stores job notifications sent to users
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.alert_history (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id     UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  job_title   TEXT NOT NULL,
+  company     TEXT,
+  location    TEXT,
+  platform    TEXT,
+  job_url     TEXT,
+  sent_at     TIMESTAMPTZ DEFAULT NOW() NOT NULL
+);
+
+ALTER TABLE public.alert_history ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view own alert history"
+  ON public.alert_history FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE INDEX IF NOT EXISTS idx_job_alerts_user_id ON public.job_alerts(user_id);
+CREATE INDEX IF NOT EXISTS idx_alert_history_user_id ON public.alert_history(user_id);
+CREATE INDEX IF NOT EXISTS idx_alert_history_sent_at ON public.alert_history(sent_at DESC);

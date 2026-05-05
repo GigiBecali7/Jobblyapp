@@ -8,7 +8,6 @@ import type { UserProfile, UserData, WritingStyle, Template, Lang, CVData } from
 import type { Job } from '@/components/steps/Step4Jobs'
 import { T } from '@/lib/translations'
 
-import Toast, { type ToastType } from '@/components/Toast'
 import Nav from '@/components/Nav'
 import Hero from '@/components/Hero'
 import StepsBar from '@/components/StepsBar'
@@ -17,6 +16,8 @@ import AuthModal from '@/components/AuthModal'
 import ProModal from '@/components/ProModal'
 import LegalModal from '@/components/LegalModal'
 import Footer from '@/components/Footer'
+import LandingSections from '@/components/LandingSections'
+import Toast, { type ToastType } from '@/components/Toast'
 import Step1Profile from '@/components/steps/Step1Profile'
 import Step2Style from '@/components/steps/Step2Style'
 import Step3Design from '@/components/steps/Step3Design'
@@ -26,10 +27,7 @@ import Step5Result from '@/components/steps/Step5Result'
 export default function Home() {
   const supabase = createClient()
 
-  // Auth & user state
   const [user, setUser] = useState<UserProfile | null>(null)
-
-  // App state
   const [lang, setLang] = useState<Lang>('en')
   const [step, setStep] = useState(1)
   const [wStyle, setWStyle] = useState<WritingStyle>('balanced')
@@ -39,13 +37,11 @@ export default function Home() {
   const [cvData, setCvData] = useState<CVData | null>(null)
   const [generating, setGenerating] = useState(false)
   const [loadMsg, setLoadMsg] = useState('')
+  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null)
 
-  // Modal state
   const [authModal, setAuthModal] = useState<{ open: boolean; tab: 'login' | 'register' }>({ open: false, tab: 'login' })
   const [proModal, setProModal] = useState(false)
   const [legalModal, setLegalModal] = useState<{ open: boolean; section: string }>({ open: false, section: 'impressum' })
-
-  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null)
 
   const appTopRef = useRef<HTMLDivElement>(null)
   const t = T[lang]
@@ -54,13 +50,8 @@ export default function Home() {
     setToast({ message, type })
   }
 
-  // Fetch user profile on mount and auth state change
   const fetchProfile = useCallback(async (userId: string) => {
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
+    const { data } = await supabase.from('profiles').select('*').eq('id', userId).single()
     if (data) setUser(data as UserProfile)
   }, [supabase])
 
@@ -68,15 +59,10 @@ export default function Home() {
     supabase.auth.getUser().then(({ data: { user: u } }) => {
       if (u) fetchProfile(u.id)
     })
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        fetchProfile(session.user.id)
-      } else {
-        setUser(null)
-      }
+      if (session?.user) fetchProfile(session.user.id)
+      else setUser(null)
     })
-
     return () => subscription.unsubscribe()
   }, [supabase, fetchProfile])
 
@@ -90,37 +76,24 @@ export default function Home() {
   }
 
   async function handleGenerate() {
-    if (!user) {
-      setAuthModal({ open: true, tab: 'login' })
-      return
-    }
-    if (!user.is_pro) {
-      setProModal(true)
-      return
-    }
+    if (!user) { setAuthModal({ open: true, tab: 'login' }); return }
+    if (!user.is_pro) { setProModal(true); return }
 
-    // Validate inputs before proceeding
+    // Validate inputs
     try {
       const vRes = await fetch('/api/validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          position: userData.position,
-          skills: userData.skills,
-          lastjob: userData.lastjob,
-        }),
+        body: JSON.stringify({ position: userData.position, skills: userData.skills, lastjob: userData.lastjob }),
       })
       const vData = await vRes.json()
       if (!vData.valid) {
         showToast(vData.reason || 'Please check your inputs and try again.', 'error')
         return
       }
-    } catch {
-      // Validation network error — fail open
-    }
+    } catch { /* fail open */ }
 
     showToast('Looking good! Generating your CV now…', 'success')
-
     setStep(5)
     setGenerating(true)
     setCvData(null)
@@ -140,15 +113,10 @@ export default function Home() {
         body: JSON.stringify({ userData, style: wStyle, lang, selectedJob, template }),
       })
       clearInterval(iv)
-
       const data = await res.json()
-      if (data.error) {
-        setLoadMsg('Error: ' + data.error)
-        setGenerating(false)
-        return
-      }
+      if (data.error) { setLoadMsg('Error: ' + data.error); setGenerating(false); return }
       setCvData(data.cvData)
-    } catch (err) {
+    } catch {
       clearInterval(iv)
       setLoadMsg('Something went wrong. Please try again.')
     } finally {
@@ -157,16 +125,12 @@ export default function Home() {
   }
 
   function handleStartOver() {
-    setStep(1)
-    setCvData(null)
-    setSelectedJob(null)
-    scrollToApp()
+    setStep(1); setCvData(null); setSelectedJob(null); scrollToApp()
   }
 
-  function showStep(n: number) {
-    setStep(n)
-    scrollToApp()
-  }
+  function showStep(n: number) { setStep(n); scrollToApp() }
+
+  const isPro = !!user?.is_pro
 
   return (
     <div className="app">
@@ -185,6 +149,15 @@ export default function Home() {
         t={t}
         onCta={scrollToApp}
         onSignIn={() => setAuthModal({ open: true, tab: 'login' })}
+      />
+
+      {/* Marketing sections between hero and builder */}
+      <LandingSections
+        onCta={scrollToApp}
+        onUpgrade={() => {
+          if (!user) setAuthModal({ open: true, tab: 'register' })
+          else setProModal(true)
+        }}
       />
 
       <div ref={appTopRef}>
@@ -215,6 +188,8 @@ export default function Home() {
             onSelect={setTemplate}
             onNext={() => showStep(4)}
             onBack={() => showStep(2)}
+            isPro={isPro}
+            onNeedPro={() => setProModal(true)}
           />
         )}
         {step === 4 && (
@@ -236,6 +211,10 @@ export default function Home() {
             userData={userData}
             template={template}
             onStartOver={handleStartOver}
+            selectedJob={selectedJob}
+            isPro={isPro}
+            onNeedPro={() => setProModal(true)}
+            lang={lang}
           />
         )}
 
@@ -246,12 +225,9 @@ export default function Home() {
         <AuthModal
           initialTab={authModal.tab}
           onClose={() => setAuthModal({ open: false, tab: 'login' })}
-          onSuccess={() => {
-            setAuthModal({ open: false, tab: 'login' })
-          }}
+          onSuccess={() => setAuthModal({ open: false, tab: 'login' })}
         />
       )}
-
       {proModal && (
         <ProModal
           onClose={() => setProModal(false)}
@@ -259,14 +235,12 @@ export default function Home() {
           onNeedAuth={() => setAuthModal({ open: true, tab: 'login' })}
         />
       )}
-
       {legalModal.open && (
         <LegalModal
           section={legalModal.section as 'impressum' | 'datenschutz' | 'agb' | 'cookies'}
           onClose={() => setLegalModal({ open: false, section: 'impressum' })}
         />
       )}
-
       {toast && (
         <Toast
           message={toast.message}

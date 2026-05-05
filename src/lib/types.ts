@@ -46,8 +46,18 @@ export interface UserData {
   skills: string
   languages: string
   lastjob: string
+  photo?: string
+}
+
+export interface JobAlert {
+  id: string
+  user_id: string
+  enabled: boolean
+  platforms: string[]
+  frequency: 'instant' | 'daily' | 'weekly'
+  created_at: string
 }
 
 export type WritingStyle = 'balanced' | 'friendly' | 'confident' | 'formal'
-export type Template = 'classic' | 'modern' | 'minimal' | 'navy' | 'executive' | 'tech'
+export type Template = 'classic' | 'modern' | 'minimal' | 'navy' | 'executive' | 'tech' | 'nordic' | 'mono' | 'split'
 export type Lang = 'en' | 'de' | 'tr' | 'es' | 'fr' | 'pl'

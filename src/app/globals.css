@@ -445,7 +445,99 @@ body {
 }
 .toast-close:hover { opacity: 1; }
 
+/* ---- LANDING SECTIONS ---- */
+.landing-sections {
+  border-left: 0.5px solid var(--border); border-right: 0.5px solid var(--border);
+}
+.ls-section {
+  padding: 3.5rem 2rem; background: var(--black); text-align: center;
+  border-top: 0.5px solid var(--border);
+}
+.ls-alt { background: #080810; }
+.ls-pill {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 11px;
+  padding: 4px 12px; border-radius: 20px; border: 0.5px solid rgba(27,46,107,0.5);
+  color: var(--navy3); background: rgba(27,46,107,0.2); margin-bottom: 1rem;
+  font-weight: 500; letter-spacing: .02em;
+}
+.ls-h2 {
+  font-size: 26px; font-weight: 600; letter-spacing: -.6px; line-height: 1.2;
+  color: #fff; margin-bottom: 2rem;
+}
+.ls-h2 span { color: var(--navy2); }
+
+/* USP grid */
+.usp-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px; text-align: left;
+}
+.usp-card {
+  padding: 1.25rem; border-radius: 12px; background: rgba(255,255,255,0.02);
+  border: 0.5px solid var(--border); transition: border-color .2s;
+}
+.usp-card:hover { border-color: rgba(27,46,107,0.5); }
+.usp-icon { font-size: 22px; margin-bottom: 10px; }
+.usp-title { font-size: 14px; font-weight: 600; color: #fff; margin-bottom: 5px; }
+.usp-desc { font-size: 12.5px; color: var(--mid); line-height: 1.65; }
+
+/* How it works */
+.how-grid {
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; text-align: center;
+}
+.how-step {
+  padding: 1.25rem .75rem; border-radius: 12px;
+  border: 0.5px solid var(--border); background: rgba(255,255,255,0.02);
+}
+.how-num { font-size: 10px; font-weight: 700; color: var(--navy2); letter-spacing: .08em; margin-bottom: 10px; }
+.how-icon { font-size: 24px; margin-bottom: 8px; }
+.how-label { font-size: 12px; font-weight: 600; color: #fff; margin-bottom: 5px; line-height: 1.3; }
+.how-desc { font-size: 11px; color: var(--mid); line-height: 1.6; }
+
+/* Pro plan */
+.pro-card {
+  display: grid; grid-template-columns: 220px 1fr; gap: 0;
+  border: 0.5px solid rgba(27,46,107,0.5); border-radius: 14px; overflow: hidden;
+  text-align: left; max-width: 620px; margin: 0 auto;
+  background: rgba(27,46,107,0.1);
+}
+.pro-card-left {
+  padding: 2rem 1.5rem; background: rgba(27,46,107,0.2);
+  border-right: 0.5px solid rgba(27,46,107,0.4);
+}
+.pro-card-right { padding: 1.5rem; }
+.pro-price { font-size: 36px; font-weight: 700; color: #fff; letter-spacing: -.8px; line-height: 1; }
+.pro-price span { font-size: 16px; color: var(--mid); font-weight: 400; }
+.pro-note { font-size: 11px; color: var(--mid); margin-top: 8px; line-height: 1.5; }
+.pro-feat {
+  display: flex; align-items: flex-start; gap: 10px;
+  font-size: 13px; color: var(--mid); padding: 5px 0; line-height: 1.4;
+}
+.pro-check { color: var(--success); font-weight: 700; flex-shrink: 0; margin-top: 1px; }
+
+/* Comparison table */
+.cmp-wrap { overflow-x: auto; }
+.cmp-table {
+  width: 100%; border-collapse: collapse; font-size: 13px;
+}
+.cmp-table th, .cmp-table td {
+  padding: 10px 14px; border-bottom: 0.5px solid var(--border);
+  text-align: center; color: var(--mid);
+}
+.cmp-table th { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.5); padding-bottom: 12px; }
+.cmp-table td:first-child, .cmp-table th:first-child { text-align: left; color: rgba(255,255,255,0.7); }
+.cmp-jobbly { background: rgba(27,46,107,0.15); color: #fff !important; }
+.cmp-table th.cmp-jobbly { color: #93AFFD !important; }
+.cmp-yes { color: var(--success); font-weight: 700; }
+.cmp-no { color: rgba(255,255,255,0.2); }
+.cmp-price-win { color: #93AFFD; font-weight: 600; }
+.cmp-price { color: var(--mid); }
+
 /* ---- RESPONSIVE ---- */
+@media (max-width: 600px) {
+  .how-grid { grid-template-columns: repeat(2, 1fr); }
+  .pro-card { grid-template-columns: 1fr; }
+  .pro-card-left { border-right: none; border-bottom: 0.5px solid rgba(27,46,107,0.4); }
+}
 @media (max-width: 500px) {
   .hero h1 { font-size: 24px; }
   .g2 { grid-template-columns: 1fr; }
@@ -453,4 +545,7 @@ body {
   .tpl-grid { grid-template-columns: repeat(2, 1fr); }
   .hero-btns { flex-direction: column; align-items: stretch; }
   .hbtn { text-align: center; }
+  .ls-h2 { font-size: 20px; }
+  .usp-grid { grid-template-columns: 1fr; }
+  .how-grid { grid-template-columns: 1fr 1fr; }
 }

@@ -43,6 +43,7 @@ export default function Step1Profile({ t, initialData, onNext }: Props) {
       email, phone, city: city || 'Vienna', linkedin,
       industry, position, experience, education,
       skills, languages, lastjob,
+      photo: photo || undefined,
     })
   }
 
