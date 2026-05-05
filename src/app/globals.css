@@ -445,7 +445,12 @@ body {
 }
 .toast-close:hover { opacity: 1; }
 
-/* ---- LANDING SECTIONS ---- */
+/* ---- DASHBOARD TOPBAR INPUT ---- */
+.db-search:focus { border-color: var(--navy2) !important; background: rgba(27,46,107,0.08) !important; }
+
+/* Override body overflow for dashboard full-screen */
+body:has(.db-fullscreen) { overflow: hidden; height: 100vh; }
+
 .landing-sections {
   border-left: 0.5px solid var(--border); border-right: 0.5px solid var(--border);
 }
