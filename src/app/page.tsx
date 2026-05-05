@@ -8,6 +8,7 @@ import type { UserProfile, UserData, WritingStyle, Template, Lang, CVData } from
 import type { Job } from '@/components/steps/Step4Jobs'
 import { T } from '@/lib/translations'
 
+import Toast, { type ToastType } from '@/components/Toast'
 import Nav from '@/components/Nav'
 import Hero from '@/components/Hero'
 import StepsBar from '@/components/StepsBar'
@@ -44,8 +45,14 @@ export default function Home() {
   const [proModal, setProModal] = useState(false)
   const [legalModal, setLegalModal] = useState<{ open: boolean; section: string }>({ open: false, section: 'impressum' })
 
+  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null)
+
   const appTopRef = useRef<HTMLDivElement>(null)
   const t = T[lang]
+
+  function showToast(message: string, type: ToastType) {
+    setToast({ message, type })
+  }
 
   // Fetch user profile on mount and auth state change
   const fetchProfile = useCallback(async (userId: string) => {
@@ -91,6 +98,28 @@ export default function Home() {
       setProModal(true)
       return
     }
+
+    // Validate inputs before proceeding
+    try {
+      const vRes = await fetch('/api/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          position: userData.position,
+          skills: userData.skills,
+          lastjob: userData.lastjob,
+        }),
+      })
+      const vData = await vRes.json()
+      if (!vData.valid) {
+        showToast(vData.reason || 'Please check your inputs and try again.', 'error')
+        return
+      }
+    } catch {
+      // Validation network error — fail open
+    }
+
+    showToast('Looking good! Generating your CV now…', 'success')
 
     setStep(5)
     setGenerating(true)
@@ -235,6 +264,14 @@ export default function Home() {
         <LegalModal
           section={legalModal.section as 'impressum' | 'datenschutz' | 'agb' | 'cookies'}
           onClose={() => setLegalModal({ open: false, section: 'impressum' })}
+        />
+      )}
+
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onDismiss={() => setToast(null)}
         />
       )}
     </div>

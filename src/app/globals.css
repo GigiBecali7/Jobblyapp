@@ -426,6 +426,25 @@ body {
   border-radius: 12px; background: rgba(255,255,255,0.02); margin: 2rem 0;
 }
 
+/* ---- TOAST ---- */
+.toast {
+  position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%) translateY(1rem);
+  display: flex; align-items: center; gap: 10px;
+  padding: .75rem 1.1rem; border-radius: 10px; font-size: 14px; font-weight: 500;
+  border: 0.5px solid; max-width: calc(100vw - 2rem); width: max-content;
+  opacity: 0; transition: opacity .25s, transform .25s; z-index: 9999;
+  box-shadow: 0 8px 32px rgba(0,0,0,.5);
+}
+.toast-in { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast-success { background: var(--success-bg); border-color: var(--success-border); color: var(--success); }
+.toast-error { background: rgba(60,10,10,0.9); border-color: #7f2020; color: #f87171; }
+.toast-icon { font-size: 15px; font-weight: 700; flex-shrink: 0; }
+.toast-close {
+  background: none; border: none; color: inherit; cursor: pointer; font-size: 18px;
+  line-height: 1; padding: 0 0 0 6px; opacity: .6; font-family: inherit; flex-shrink: 0;
+}
+.toast-close:hover { opacity: 1; }
+
 /* ---- RESPONSIVE ---- */
 @media (max-width: 500px) {
   .hero h1 { font-size: 24px; }
