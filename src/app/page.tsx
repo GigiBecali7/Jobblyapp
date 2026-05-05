@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { UserProfile, UserData, WritingStyle, Template, Lang, CVData } from '@/lib/types'
 import type { Job } from '@/components/steps/Step4Jobs'
@@ -26,6 +27,7 @@ import Step5Result from '@/components/steps/Step5Result'
 
 export default function Home() {
   const supabase = createClient()
+  const router = useRouter()
 
   const [user, setUser] = useState<UserProfile | null>(null)
   const [lang, setLang] = useState<Lang>('en')
@@ -57,14 +59,14 @@ export default function Home() {
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user: u } }) => {
-      if (u) fetchProfile(u.id)
+      if (u) { router.push('/dashboard'); return }
     })
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) fetchProfile(session.user.id)
+      if (session?.user) { router.push('/dashboard'); return }
       else setUser(null)
     })
     return () => subscription.unsubscribe()
-  }, [supabase, fetchProfile])
+  }, [supabase, fetchProfile, router])
 
   async function handleLogout() {
     await supabase.auth.signOut()

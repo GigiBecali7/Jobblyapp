@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
 interface Props {
@@ -29,6 +30,7 @@ export default function AuthModal({ initialTab = 'login', onClose, onSuccess }: 
   const [age, setAge] = useState(false)
 
   const supabase = createClient()
+  const router = useRouter()
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -50,6 +52,7 @@ export default function AuthModal({ initialTab = 'login', onClose, onSuccess }: 
     }
     onSuccess()
     onClose()
+    router.push('/dashboard')
   }
 
   async function handleRegister(e: React.FormEvent) {
