@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { stripe } from '@/lib/stripe'
 import { createServerClient } from '@supabase/ssr'
 import type Stripe from 'stripe'
 
-// Use service role for webhook — bypasses RLS
 function createAdminClient() {
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,25 +14,25 @@ async function updateProStatus(userId: string, isPro: boolean, subscriptionId?: 
   const supabase = createAdminClient()
   await supabase
     .from('profiles')
-    .update({
-      is_pro: isPro,
-      stripe_subscription_id: subscriptionId ?? null,
-    })
+    .update({ is_pro: isPro, stripe_subscription_id: subscriptionId ?? null })
     .eq('id', userId)
 }
 
 export async function POST(request: NextRequest) {
+  if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_WEBHOOK_SECRET) {
+    return NextResponse.json({ error: 'Payments not configured' }, { status: 503 })
+  }
+
+  const { getStripe } = await import('@/lib/stripe')
+  const stripe = getStripe()
+
   const body = await request.text()
   const signature = request.headers.get('stripe-signature')!
 
   let event: Stripe.Event
 
   try {
-    event = stripe.webhooks.constructEvent(
-      body,
-      signature,
-      process.env.STRIPE_WEBHOOK_SECRET!
-    )
+    event = stripe.webhooks.constructEvent(body, signature, process.env.STRIPE_WEBHOOK_SECRET)
   } catch (err) {
     console.error('Webhook signature verification failed:', err)
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
@@ -52,7 +50,6 @@ export async function POST(request: NextRequest) {
       }
       break
     }
-
     case 'customer.subscription.updated': {
       const sub = event.data.object as Stripe.Subscription
       const userId = getUserId(sub)
@@ -62,25 +59,19 @@ export async function POST(request: NextRequest) {
       }
       break
     }
-
     case 'customer.subscription.deleted': {
       const sub = event.data.object as Stripe.Subscription
       const userId = getUserId(sub)
-      if (userId) {
-        await updateProStatus(userId, false)
-      }
+      if (userId) await updateProStatus(userId, false)
       break
     }
-
     case 'invoice.payment_failed': {
       const invoice = event.data.object as Stripe.Invoice
       const subId = typeof invoice.subscription === 'string' ? invoice.subscription : null
       if (subId) {
         const sub = await stripe.subscriptions.retrieve(subId)
         const userId = getUserId(sub)
-        if (userId) {
-          await updateProStatus(userId, false, subId)
-        }
+        if (userId) await updateProStatus(userId, false, subId)
       }
       break
     }

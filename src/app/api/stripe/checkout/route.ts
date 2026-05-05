@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { stripe } from '@/lib/stripe'
 
 export async function POST(request: NextRequest) {
+  if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_PRICE_ID) {
+    return NextResponse.json({ error: 'Payments not configured' }, { status: 503 })
+  }
+
   try {
+    const { getStripe } = await import('@/lib/stripe')
+    const stripe = getStripe()
+
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
 
@@ -19,7 +25,6 @@ export async function POST(request: NextRequest) {
 
     let customerId = profile?.stripe_customer_id
 
-    // Create Stripe customer if not exists
     if (!customerId) {
       const customer = await stripe.customers.create({
         email: profile?.email || user.email,
@@ -39,19 +44,12 @@ export async function POST(request: NextRequest) {
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       payment_method_types: ['card'],
-      line_items: [
-        {
-          price: process.env.STRIPE_PRICE_ID!,
-          quantity: 1,
-        },
-      ],
+      line_items: [{ price: process.env.STRIPE_PRICE_ID, quantity: 1 }],
       mode: 'subscription',
       success_url: `${appUrl}/dashboard?success=1`,
       cancel_url: `${appUrl}/?canceled=1`,
       metadata: { supabase_user_id: user.id },
-      subscription_data: {
-        metadata: { supabase_user_id: user.id },
-      },
+      subscription_data: { metadata: { supabase_user_id: user.id } },
     })
 
     return NextResponse.json({ url: session.url })
