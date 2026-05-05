@@ -8,7 +8,7 @@ interface Props {
 export function JMark({ size = 32 }: { size?: number }) {
   return (
     <div style={{
-      width: size, height: size, borderRadius: size * 0.28,
+      width: size, height: size, borderRadius: 8,
       background: '#1B2E6B', display: 'flex', alignItems: 'center',
       justifyContent: 'center', flexShrink: 0,
       boxShadow: '0 0 0 1px rgba(37,58,133,0.8)',
