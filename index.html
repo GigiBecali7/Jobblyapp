@@ -608,7 +608,7 @@ function updateHeader(){
 function openProModal(){document.getElementById('pro-overlay').style.display='flex';}
 function closeProModal(){document.getElementById('pro-overlay').style.display='none';}
 function activatePro(){isPro=true;if(user)user.pro=true;closeProModal();updateHeader();generate();}
-function tryGenerate(){if(!user){openAuth('login');return;}if(!isPro){openProModal();return;}generate();}
+async function tryGenerate(){if(!user){openAuth("login");return;}if(!isPro){openProModal();return;}const valid=await validateInputs();if(valid)generate();}
 
 // ---- UI ----
 function scrollToApp(){document.getElementById('app-top').scrollIntoView({behavior:'smooth'});}
@@ -681,6 +681,187 @@ function changeLang(l){
   if(t.sn)t.sn.forEach((n,i)=>{const el=document.getElementById('sn'+i);if(el)el.textContent=n;});
   if(t.sd)t.sd.forEach((d,i)=>{const el=document.getElementById('sd'+i);if(el)el.textContent=d;});
   document.getElementById('preview-text').textContent=(t.previews||{})[wStyle]||(t.previews||{}).balanced||'';
+}
+
+// ---- VALIDATION ----
+const blocklist = ['sex','porn','fuck','shit','kill','murder','rape','drugs','cocaine','heroin','nazi','terror','bomb','weapon','nude','naked','prostitut','escort','onlyfans','pferden schnaxln','leute schlagen','ficken','hurensohn','scheiß','arschloch','wichser','drogen','nutte','bordell'];
+
+function containsBlocklisted(text){
+  const lower = text.toLowerCase();
+  return blocklist.some(w => lower.includes(w));
+}
+
+function isGibberish(text){
+  if(!text || text.trim().length < 2) return true;
+  // Zu viele Sonderzeichen
+  const specialChars = (text.match(/[^a-zA-ZäöüÄÖÜß\s\-\/&,\.]/g) || []).length;
+  if(specialChars > text.length * 0.3) return true;
+  // Nur gleiche Buchstaben wiederholt (aaaaaaa, xxxxx)
+  if(/^(.)\1{4,}$/.test(text.trim())) return true;
+  // Zufällige Buchstabenfolgen (keine Vokale)
+  const words = text.trim().split(/\s+/);
+  const noVowelWords = words.filter(w => w.length > 4 && !/[aeiouäöüAEIOUÄÖÜ]/i.test(w));
+  if(noVowelWords.length > words.length * 0.6) return true;
+  return false;
+}
+
+function showValidationError(message){
+  // Remove existing error
+  const existing = document.getElementById('validation-toast');
+  if(existing) existing.remove();
+
+  const toast = document.createElement('div');
+  toast.id = 'validation-toast';
+  toast.style.cssText = `
+    position:fixed;top:24px;left:50%;transform:translateX(-50%);
+    background:#0D1117;border:0.5px solid rgba(239,68,68,0.4);
+    border-radius:10px;padding:14px 20px;z-index:999;
+    display:flex;align-items:center;gap:12px;
+    box-shadow:0 8px 32px rgba(0,0,0,0.4);
+    animation:slideDown .3s ease;max-width:420px;width:90%;
+  `;
+  toast.innerHTML = `
+    <div style="width:32px;height:32px;border-radius:50%;background:rgba(239,68,68,0.15);border:0.5px solid rgba(239,68,68,0.4);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px">⚠️</div>
+    <div>
+      <div style="font-size:13px;font-weight:500;color:#F87171;margin-bottom:2px">Input not accepted</div>
+      <div style="font-size:12px;color:#8892A4;line-height:1.5">${message}</div>
+    </div>
+    <div onclick="this.parentElement.remove()" style="margin-left:auto;cursor:pointer;color:#8892A4;font-size:18px;padding:4px">×</div>
+  `;
+  document.body.appendChild(toast);
+  setTimeout(() => { if(toast.parentElement) toast.remove(); }, 5000);
+}
+
+function showValidationSuccess(){
+  const existing = document.getElementById('validation-toast');
+  if(existing) existing.remove();
+
+  const toast = document.createElement('div');
+  toast.id = 'validation-toast';
+  toast.style.cssText = `
+    position:fixed;top:24px;left:50%;transform:translateX(-50%);
+    background:#0D1117;border:0.5px solid rgba(74,222,128,0.4);
+    border-radius:10px;padding:14px 20px;z-index:999;
+    display:flex;align-items:center;gap:12px;
+    box-shadow:0 8px 32px rgba(0,0,0,0.4);
+    animation:slideDown .3s ease;max-width:420px;width:90%;
+  `;
+  toast.innerHTML = `
+    <div style="width:32px;height:32px;border-radius:50%;background:rgba(74,222,128,0.15);border:0.5px solid rgba(74,222,128,0.4);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px">✓</div>
+    <div>
+      <div style="font-size:13px;font-weight:500;color:#4ADE80;margin-bottom:2px">Profile verified</div>
+      <div style="font-size:12px;color:#8892A4">Generating your application...</div>
+    </div>
+  `;
+  document.body.appendChild(toast);
+  setTimeout(() => { if(toast.parentElement) toast.remove(); }, 3000);
+}
+
+function showValidationLoading(){
+  const existing = document.getElementById('validation-toast');
+  if(existing) existing.remove();
+
+  const toast = document.createElement('div');
+  toast.id = 'validation-toast';
+  toast.style.cssText = `
+    position:fixed;top:24px;left:50%;transform:translateX(-50%);
+    background:#0D1117;border:0.5px solid rgba(27,46,107,0.5);
+    border-radius:10px;padding:14px 20px;z-index:999;
+    display:flex;align-items:center;gap:12px;
+    box-shadow:0 8px 32px rgba(0,0,0,0.4);
+    animation:slideDown .3s ease;max-width:420px;width:90%;
+  `;
+  toast.innerHTML = `
+    <div style="width:32px;height:32px;border-radius:50%;background:rgba(27,46,107,0.3);border:0.5px solid rgba(27,46,107,0.6);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+      <div style="width:14px;height:14px;border:2px solid rgba(147,175,253,0.3);border-top-color:#93AFFD;border-radius:50%;animation:spin .8s linear infinite"></div>
+    </div>
+    <div>
+      <div style="font-size:13px;font-weight:500;color:#93AFFD;margin-bottom:2px">Verifying your profile</div>
+      <div style="font-size:12px;color:#8892A4">Checking inputs for quality...</div>
+    </div>
+  `;
+  document.body.appendChild(toast);
+}
+
+// CSS Animation hinzufügen
+const styleEl = document.createElement('style');
+styleEl.textContent = `
+  @keyframes slideDown{from{opacity:0;transform:translateX(-50%) translateY(-10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+  @keyframes spin{to{transform:rotate(360deg)}}
+`;
+document.head.appendChild(styleEl);
+
+async function validateInputs(){
+  const position = ud.position || '';
+  const skills = ud.skills || '';
+  const lastjob = ud.lastjob || '';
+  const fname = ud.fname || '';
+  const lname = ud.lname || '';
+
+  // 1. Pflichtfelder check
+  if(!fname || fname.length < 2){
+    showValidationError('Please enter your first name.');
+    return false;
+  }
+  if(!position || position.length < 2){
+    showValidationError('Please enter a desired position.');
+    return false;
+  }
+
+  // 2. Blocklist check
+  const allText = [position, skills, lastjob].join(' ');
+  if(containsBlocklisted(allText)){
+    showValidationError('Your input contains inappropriate content. Please review your entries and try again.');
+    return false;
+  }
+
+  // 3. Gibberish check
+  if(isGibberish(position)){
+    showValidationError('The position you entered doesn\'t seem valid. Please enter a real job title.');
+    return false;
+  }
+  if(skills && isGibberish(skills)){
+    showValidationError('Please enter real skills, separated by commas (e.g. Excel, teamwork, communication).');
+    return false;
+  }
+
+  // 4. KI-Vorprüfung — nur wenn nötig
+  showValidationLoading();
+  try{
+    const checkPrompt = `You are a content moderator for a professional job application platform.
+Check if the following job-related inputs are legitimate and professional.
+Be LENIENT — only reject if inputs are clearly inappropriate, nonsensical, or offensive.
+Accept unusual but real jobs, creative fields, trade jobs, etc.
+
+Position: "${position}"
+Skills: "${skills}"
+Last role: "${lastjob}"
+
+Reply ONLY with JSON: {"valid": true/false, "reason": "short reason if invalid"}`;
+
+    const res = await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':ANTHROPIC_API_KEY,'anthropic-version':'2023-06-01'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:100,messages:[{role:'user',content:checkPrompt}]})
+    });
+    const data = await res.json();
+    const txt = data.content.map(c=>c.text||'').join('');
+    const result = JSON.parse(txt.replace(/```json|```/g,'').trim());
+
+    if(!result.valid){
+      showValidationError(result.reason || 'Your inputs don\'t appear to be job-related. Please check your entries.');
+      return false;
+    }
+  }catch(e){
+    // Bei Fehler in der Prüfung — trotzdem weitermachen
+    console.log('Validation check skipped:', e);
+  }
+
+  const existing = document.getElementById('validation-toast');
+  if(existing) existing.remove();
+  showValidationSuccess();
+  await new Promise(r => setTimeout(r, 1000));
+  return true;
 }
 
 // ---- GENERATE ----
