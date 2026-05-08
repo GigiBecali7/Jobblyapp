@@ -20,16 +20,21 @@ export default async function DashboardPage({
       .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
-      .limit(20),
+      .limit(50),
   ])
 
   const params = await searchParams
   const justUpgraded = params.success === '1'
 
-  // Full-screen layout — no .app container
+  // Grant permanent Pro to owner account
+  const resolvedProfile = (profile || {}) as UserProfile
+  if (user.email === 'drthinkbyte@gmail.com') {
+    resolvedProfile.is_pro = true
+  }
+
   return (
     <DashboardClient
-      profile={profile as UserProfile}
+      profile={resolvedProfile}
       applications={(applications || []) as Application[]}
       justUpgraded={justUpgraded}
     />

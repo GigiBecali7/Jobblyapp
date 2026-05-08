@@ -59,14 +59,14 @@ export default function Home() {
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user: u } }) => {
-      if (u) { router.push('/dashboard'); return }
+      if (u) { router.replace('/dashboard'); return }
     })
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) { router.push('/dashboard'); return }
+      if (session?.user) { router.replace('/dashboard'); return }
       else setUser(null)
     })
     return () => subscription.unsubscribe()
-  }, [supabase, fetchProfile, router])
+  }, [supabase, router])
 
   async function handleLogout() {
     await supabase.auth.signOut()

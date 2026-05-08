@@ -269,12 +269,22 @@ export const T: Record<Lang, Translation> = {
 }
 
 export const legalTexts = {
-  impressum: `<h2>Imprint</h2>
-<p style="color:rgba(255,255,255,.4);font-size:12px;margin-bottom:1rem">Pursuant to §5 ECG Austria</p>
-<h3>Company</h3>
-<p>Jobbly (jobblyapp.com)<br>[YOUR FULL NAME]<br>[YOUR ADDRESS]<br>Vienna, Austria<br>hello@jobblyapp.com</p>
-<h3>Disclaimer</h3>
-<p>AI-generated content is a template only and does not replace professional advice.</p>`,
+  impressum: `<h2>Impressum</h2>
+<p style="color:rgba(255,255,255,.4);font-size:12px;margin-bottom:1rem">Gemäß §5 ECG (E-Commerce-Gesetz) Österreich</p>
+<h3>Unternehmensbezeichnung</h3>
+<p>Jobbly (jobblyapp.com)</p>
+<h3>Inhaber</h3>
+<p>[VORNAME NACHNAME]<br>[STRASSE UND HAUSNUMMER]<br>[PLZ] Wien, Österreich</p>
+<h3>Kontakt</h3>
+<p>E-Mail: hello@jobblyapp.com</p>
+<h3>Unternehmensgegenstand</h3>
+<p>Dienstleistungen in der automatischen Datenverarbeitung und Informationstechnik</p>
+<h3>Gewerbebehörde</h3>
+<p>Magistratisches Bezirksamt Wien</p>
+<h3>Anwendbares Recht</h3>
+<p>Österreichisches Recht. Gerichtsstand: Wien.</p>
+<h3>Haftungsausschluss</h3>
+<p>KI-generierte Inhalte sind Vorlagen und ersetzen keine professionelle Beratung. Trotz sorgfältiger Prüfung übernehmen wir keine Haftung für die Richtigkeit verlinkter externer Inhalte.</p>`,
 
   datenschutz: `<h2>Privacy Policy</h2>
 <p style="color:rgba(255,255,255,.4);font-size:12px;margin-bottom:1rem">GDPR compliant</p>
