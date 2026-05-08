@@ -592,3 +592,20 @@ body {
   .btn-row { padding: 16px 20px; }
   .cookie { padding: 12px 20px; }
 }
+
+/* ── THEME: LIGHT MODE ──────────────────────────────────────── */
+html.theme-light {
+  filter: invert(1) hue-rotate(180deg);
+}
+html.theme-light img,
+html.theme-light video,
+html.theme-light [data-no-invert] {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+/* ── DASHBOARD RESPONSIVE ───────────────────────────────────── */
+@media (max-width: 768px) {
+  .dashboard-sidebar { display: none !important; }
+  .dashboard-right { display: none !important; }
+  .dashboard-main { padding: 16px !important; }
+}

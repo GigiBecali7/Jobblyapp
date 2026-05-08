@@ -273,16 +273,26 @@ export const legalTexts = {
 <p style="color:rgba(255,255,255,.4);font-size:12px;margin-bottom:1rem">Gemäß §5 ECG (E-Commerce-Gesetz) Österreich</p>
 <h3>Unternehmensbezeichnung</h3>
 <p>Jobbly (jobblyapp.com)</p>
-<h3>Inhaber</h3>
-<p>[VORNAME NACHNAME]<br>[STRASSE UND HAUSNUMMER]<br>[PLZ] Wien, Österreich</p>
+<h3>Geschäftsführer / CEO</h3>
+<p>Lukas Chencean</p>
+<h3>Adresse</h3>
+<p>Wien, Österreich</p>
 <h3>Kontakt</h3>
-<p>E-Mail: hello@jobblyapp.com</p>
+<p>E-Mail: <a href="mailto:hello@jobblyapp.com" style="color:#93AFFD">hello@jobblyapp.com</a></p>
 <h3>Unternehmensgegenstand</h3>
+<p>KI-gestützte Bewerbungsunterstützung und Karriereplattform</p>
+<h3>Gewerbe</h3>
 <p>Dienstleistungen in der automatischen Datenverarbeitung und Informationstechnik</p>
-<h3>Gewerbebehörde</h3>
+<h3>Mitgliedschaft</h3>
+<p>Mitglied der Wirtschaftskammer Wien (WKO Wien)</p>
+<h3>Gewerbebehörde / Aufsichtsbehörde</h3>
 <p>Magistratisches Bezirksamt Wien</p>
 <h3>Anwendbares Recht</h3>
 <p>Österreichisches Recht. Gerichtsstand: Wien.</p>
+<h3>EU-Streitschlichtung</h3>
+<p>Die Europäische Kommission stellt eine Plattform zur Online-Streitbeilegung (OS) bereit: <a href="https://ec.europa.eu/consumers/odr" target="_blank" rel="noopener noreferrer" style="color:#93AFFD">https://ec.europa.eu/consumers/odr</a></p>
+<h3>Verbraucherstreitbeilegung</h3>
+<p>Jobbly ist nicht verpflichtet, an einem Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle teilzunehmen und nimmt an einem solchen auch nicht teil.</p>
 <h3>Haftungsausschluss</h3>
 <p>KI-generierte Inhalte sind Vorlagen und ersetzen keine professionelle Beratung. Trotz sorgfältiger Prüfung übernehmen wir keine Haftung für die Richtigkeit verlinkter externer Inhalte.</p>`,
 
