@@ -201,7 +201,7 @@ const MOCK_NOTIFS = [
   { id: '4', icon: '🔔', title: 'Jobbly Update', desc: 'Neue KI-Features: Lebenslauf-Builder & mehr', time: 'Vor 3 Tagen', read: true },
 ]
 
-function TopBar({ profile, isPro, onUpgrade, onNav }: { profile: UserProfile; isPro: boolean; onUpgrade: () => void; onNav: (id: NavId) => void }) {
+function TopBar({ profile, isPro, onUpgrade, onNav, onSearch }: { profile: UserProfile; isPro: boolean; onUpgrade: () => void; onNav: (id: NavId) => void; onSearch: (term: string) => void }) {
   const supabase = createClient()
   const [search, setSearch] = useState('')
   const [showPopup, setShowPopup] = useState(false)
@@ -284,10 +284,11 @@ function TopBar({ profile, isPro, onUpgrade, onNav }: { profile: UserProfile; is
         <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: C.mid, fontSize: 13, pointerEvents: 'none' }}>🔍</span>
         <input
           value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="Suche nach Jobs, Unternehmen oder Keywords..."
+          onKeyDown={e => { if (e.key === 'Enter' && search.trim()) { onSearch(search.trim()); onNav('jobs') } }}
+          placeholder="Jobs, Unternehmen oder Keywords suchen… (Enter)"
           style={{ width: '100%', padding: '9px 76px 9px 38px', borderRadius: 10, border: `0.5px solid ${C.border}`, background: 'rgba(255,255,255,0.04)', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none' }}
         />
-        <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: C.mid, fontSize: 10, background: 'rgba(255,255,255,0.07)', padding: '3px 7px', borderRadius: 5 }}>⌘ K</span>
+        <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: C.mid, fontSize: 10, background: 'rgba(255,255,255,0.07)', padding: '3px 7px', borderRadius: 5 }}>↵</span>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginLeft: 'auto' }}>
         {isPro ? (
@@ -648,8 +649,8 @@ function RightSidebar({ applications, profile, onNav }: { applications: Applicat
 }
 
 // ── Section: Jobs finden ──────────────────────────────────────────────────────
-function JobsSection({ jobs, isPro, onSelect, onNeedPro }: { jobs: ReturnType<typeof makeMockJobs>; isPro: boolean; onSelect: (j: ReturnType<typeof makeMockJobs>[0]) => void; onNeedPro: () => void }) {
-  const [search, setSearch] = useState('')
+function JobsSection({ jobs, isPro, onSelect, onNeedPro, initialSearch }: { jobs: ReturnType<typeof makeMockJobs>; isPro: boolean; onSelect: (j: ReturnType<typeof makeMockJobs>[0]) => void; onNeedPro: () => void; initialSearch?: string }) {
+  const [search, setSearch] = useState(initialSearch || '')
   const [location, setLocation] = useState('')
   const [workType, setWorkType] = useState('')
   const [minMatch, setMinMatch] = useState(0)
@@ -698,32 +699,71 @@ function JobsSection({ jobs, isPro, onSelect, onNeedPro }: { jobs: ReturnType<ty
 // ── Section: Bewerbungen ──────────────────────────────────────────────────────
 function ApplicationsSection({ applications, profile }: { applications: Application[]; profile: UserProfile }) {
   const supabase = createClient()
-  const [appStatuses, setAppStatuses] = useState<Record<string, AppStatus>>({})
+  const router = useRouter()
+  // Initialize statuses from the Supabase data (status column may not be in TS type)
+  const [appStatuses, setAppStatuses] = useState<Record<string, AppStatus>>(() => {
+    const m: Record<string, AppStatus> = {}
+    applications.forEach(a => {
+      const s = (a as unknown as Record<string, unknown>).status as AppStatus | undefined
+      if (s && APP_STATUSES.includes(s)) m[a.id] = s
+    })
+    return m
+  })
   const [showAdd, setShowAdd] = useState(false)
   const [newPos, setNewPos] = useState('')
   const [newComp, setNewComp] = useState('')
+  const [newDate, setNewDate] = useState('')
   const [saving, setSaving] = useState(false)
-  const router = useRouter()
+  const [toast, setToast] = useState('')
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  function showMsg(msg: string) {
+    setToast(msg)
+    setTimeout(() => setToast(''), 3000)
+  }
 
   function getStatus(id: string): AppStatus { return appStatuses[id] || 'Gesendet' }
-  function setStatus(id: string, status: AppStatus) { setAppStatuses(p => ({ ...p, [id]: status })) }
+
+  async function setStatus(id: string, status: AppStatus) {
+    setAppStatuses(p => ({ ...p, [id]: status }))
+    const { error } = await supabase.from('applications').update({ status } as Record<string, unknown>).eq('id', id)
+    if (error) showMsg('Fehler beim Speichern des Status')
+  }
 
   async function addApplication() {
     if (!newPos.trim()) return
     setSaving(true)
-    await supabase.from('applications').insert({
-      user_id: profile.id, position: newPos, company: newComp,
+    const { error } = await supabase.from('applications').insert({
+      user_id: profile.id, position: newPos, company: newComp || null,
       template: 'classic', style: 'balanced',
       cv_data: { profil: '', erfahrung: '', ausbildung: '', skills: [], sprachen: '', anschreiben: '' },
       cover_letter: '',
+      ...(newDate ? { applied_at: newDate } : {}),
     })
-    setSaving(false); setShowAdd(false); setNewPos(''); setNewComp('')
+    setSaving(false)
+    if (error) { showMsg('Fehler beim Erstellen der Bewerbung'); return }
+    setShowAdd(false); setNewPos(''); setNewComp(''); setNewDate('')
+    showMsg('Bewerbung gespeichert ✓')
     router.refresh()
   }
+
+  async function deleteApplication(id: string) {
+    await supabase.from('applications').delete().eq('id', id)
+    showMsg('Bewerbung gelöscht')
+    router.refresh()
+  }
+
+  const statusCounts = APP_STATUSES.reduce((acc, s) => {
+    acc[s] = applications.filter(a => getStatus(a.id) === s).length
+    return acc
+  }, {} as Record<AppStatus, number>)
+
+  const inStyle: React.CSSProperties = { padding: '9px 14px', borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.04)', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none', width: '100%' }
 
   if (applications.length === 0 && !showAdd) {
     return (
       <div style={{ maxWidth: 560 }}>
+        {toast && <div className="profile-save-toast">{toast}</div>}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
           <h2 style={{ fontSize: 22, fontWeight: 700, color: C.white }}>Bewerbungen</h2>
           <button onClick={() => setShowAdd(true)} style={{ padding: '8px 16px', borderRadius: 9, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600 }}>+ Neue Bewerbung</button>
@@ -739,47 +779,98 @@ function ApplicationsSection({ applications, profile }: { applications: Applicat
   }
 
   return (
-    <div>
+    <div style={{ maxWidth: 760 }}>
+      {toast && <div className="profile-save-toast">{toast}</div>}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <h2 style={{ fontSize: 22, fontWeight: 700, color: C.white }}>Bewerbungen</h2>
-        <button onClick={() => setShowAdd(true)} style={{ padding: '8px 16px', borderRadius: 9, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600 }}>+ Neue Bewerbung</button>
+        <button onClick={() => setShowAdd(s => !s)} style={{ padding: '8px 16px', borderRadius: 9, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600 }}>+ Neue Bewerbung</button>
       </div>
 
       {showAdd && (
-        <div style={{ padding: '16px 20px', borderRadius: 12, border: `0.5px solid rgba(27,46,107,0.4)`, background: 'rgba(27,46,107,0.12)', marginBottom: 16 }}>
+        <div style={{ padding: '18px 20px', borderRadius: 12, border: `0.5px solid rgba(27,46,107,0.4)`, background: 'rgba(27,46,107,0.1)', marginBottom: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.white, marginBottom: 14 }}>Neue Bewerbung</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-            <input value={newPos} onChange={e => setNewPos(e.target.value)} placeholder="Position *" style={{ padding: '9px 14px', borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.04)', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none' }} />
-            <input value={newComp} onChange={e => setNewComp(e.target.value)} placeholder="Unternehmen" style={{ padding: '9px 14px', borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.04)', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none' }} />
+            <div>
+              <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 5 }}>Position *</label>
+              <input value={newPos} onChange={e => setNewPos(e.target.value)} onKeyDown={e => e.key === 'Enter' && addApplication()} placeholder="z.B. Product Manager" style={inStyle} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 5 }}>Unternehmen</label>
+              <input value={newComp} onChange={e => setNewComp(e.target.value)} placeholder="z.B. TechVision GmbH" style={inStyle} />
+            </div>
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 5 }}>Bewerbungsdatum</label>
+            <input type="date" value={newDate} onChange={e => setNewDate(e.target.value)} style={{ ...inStyle, width: 'auto' }} />
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={addApplication} disabled={saving || !newPos.trim()} style={{ padding: '8px 16px', borderRadius: 9, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600 }}>{saving ? 'Speichern…' : 'Speichern'}</button>
+            <button onClick={addApplication} disabled={saving || !newPos.trim()}
+              style={{ padding: '8px 18px', borderRadius: 9, background: saving || !newPos.trim() ? 'rgba(255,255,255,0.06)' : `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: saving || !newPos.trim() ? C.mid : C.white, border: 'none', cursor: saving || !newPos.trim() ? 'not-allowed' : 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600 }}>
+              {saving ? 'Speichern…' : 'Bewerbung speichern'}
+            </button>
             <button onClick={() => setShowAdd(false)} style={{ padding: '8px 14px', borderRadius: 9, background: 'transparent', color: C.mid, border: `0.5px solid ${C.border}`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13 }}>Abbrechen</button>
           </div>
         </div>
       )}
 
-      {/* Stats row */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
-        {[['Gesendet', applications.length], ['Interview', applications.filter(a => getStatus(a.id) === 'Interview').length], ['Angebot', applications.filter(a => getStatus(a.id) === 'Angebot').length]].map(([l, v]) => (
-          <div key={String(l)} style={{ padding: '10px 16px', borderRadius: 10, background: 'rgba(255,255,255,0.02)', border: `0.5px solid ${C.border}`, flex: 1, textAlign: 'center' }}>
-            <div style={{ fontSize: 20, fontWeight: 700, color: C.white }}>{String(v)}</div>
-            <div style={{ fontSize: 11, color: C.mid, marginTop: 2 }}>{String(l)}</div>
+      {/* Stats summary */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+        {[['Gesamt', applications.length, C.white], ['Gesendet', statusCounts['Gesendet'] || 0, C.mid], ['Interview', statusCounts['Interview'] || 0, C.amber], ['Angebot', statusCounts['Angebot'] || 0, C.success], ['Abgelehnt', statusCounts['Abgelehnt'] || 0, '#f87171']].map(([l, v, col]) => (
+          <div key={String(l)} style={{ padding: '10px 16px', borderRadius: 10, background: 'rgba(255,255,255,0.02)', border: `0.5px solid ${C.border}`, flex: '1 0 auto', textAlign: 'center', minWidth: 70 }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: col as string }}>{String(v)}</div>
+            <div style={{ fontSize: 10, color: C.mid, marginTop: 2 }}>{String(l)}</div>
           </div>
         ))}
       </div>
 
-      {applications.map(app => (
-        <div key={app.id} style={{ padding: '14px 18px', borderRadius: 12, border: `0.5px solid ${C.border}`, background: 'rgba(255,255,255,0.02)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: C.white }}>{app.position}</div>
-            <div style={{ fontSize: 12, color: C.mid, marginTop: 3 }}>{app.company || '—'} · {new Date(app.created_at).toLocaleDateString('de-AT', { day: 'numeric', month: 'short' })}</div>
+      {/* Application list */}
+      {applications.map(app => {
+        const status = getStatus(app.id)
+        const expanded = expandedId === app.id
+        const cl = (app as unknown as Record<string, unknown>).cover_letter as string | undefined
+        return (
+          <div key={app.id} style={{ marginBottom: 8, borderRadius: 12, border: `0.5px solid ${expanded ? 'rgba(27,46,107,0.5)' : C.border}`, background: expanded ? 'rgba(27,46,107,0.06)' : 'rgba(255,255,255,0.02)', overflow: 'hidden', transition: 'all .2s' }}>
+            <div onClick={() => setExpandedId(expanded ? null : app.id)}
+              style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer' }}
+              onMouseEnter={e => { if (!expanded) e.currentTarget.style.background = 'rgba(255,255,255,0.03)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>
+              <div style={{ width: 40, height: 40, borderRadius: 10, background: `${STATUS_COLORS[status]}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
+                {status === 'Interview' ? '💬' : status === 'Angebot' ? '🎉' : status === 'Abgelehnt' ? '❌' : status === 'Angesehen' ? '👀' : '📤'}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: C.white }}>{app.position}</div>
+                <div style={{ fontSize: 12, color: C.mid, marginTop: 2 }}>{app.company || '—'} · {new Date(app.created_at).toLocaleDateString('de-AT', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <select value={status} onChange={e => { e.stopPropagation(); setStatus(app.id, e.target.value as AppStatus) }}
+                  onClick={e => e.stopPropagation()}
+                  style={{ padding: '5px 10px', borderRadius: 20, border: `0.5px solid ${STATUS_COLORS[status]}40`, background: `${STATUS_COLORS[status]}18`, color: STATUS_COLORS[status], fontFamily: 'inherit', fontSize: 11, fontWeight: 600, cursor: 'pointer', outline: 'none' }}>
+                  {APP_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <span style={{ fontSize: 12, color: C.mid, transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform .2s', display: 'inline-block' }}>▾</span>
+              </div>
+            </div>
+            {expanded && (
+              <div style={{ padding: '0 18px 16px', borderTop: `0.5px solid ${C.border}` }}>
+                {cl ? (
+                  <div style={{ marginTop: 14 }}>
+                    <div style={{ fontSize: 11, color: C.mid, marginBottom: 8, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.06em' }}>Anschreiben</div>
+                    <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', lineHeight: 1.7, maxHeight: 120, overflow: 'auto', padding: '10px 14px', background: 'rgba(255,255,255,0.02)', borderRadius: 8, border: `0.5px solid ${C.border}` }}>{cl}</div>
+                  </div>
+                ) : (
+                  <div style={{ marginTop: 14, fontSize: 12, color: C.mid }}>Kein Anschreiben gespeichert.</div>
+                )}
+                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                  <button onClick={() => navigator.clipboard.writeText(cl || '').then(() => showMsg('Kopiert ✓'))} disabled={!cl}
+                    style={{ padding: '6px 12px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', color: C.mid, border: `0.5px solid ${C.border}`, cursor: cl ? 'pointer' : 'not-allowed', fontFamily: 'inherit', fontSize: 12 }}>📋 Kopieren</button>
+                  <button onClick={() => deleteApplication(app.id)}
+                    style={{ padding: '6px 12px', borderRadius: 8, background: 'rgba(248,113,113,0.08)', color: '#f87171', border: '0.5px solid rgba(248,113,113,0.2)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12 }}>🗑 Löschen</button>
+                </div>
+              </div>
+            )}
           </div>
-          <select value={getStatus(app.id)} onChange={e => setStatus(app.id, e.target.value as AppStatus)}
-            style={{ padding: '5px 10px', borderRadius: 20, border: `0.5px solid ${STATUS_COLORS[getStatus(app.id)]}40`, background: `${STATUS_COLORS[getStatus(app.id)]}18`, color: STATUS_COLORS[getStatus(app.id)], fontFamily: 'inherit', fontSize: 11, fontWeight: 600, cursor: 'pointer', outline: 'none' }}>
-            {APP_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
@@ -1606,53 +1697,99 @@ function ProfileSection({ profile }: { profile: UserProfile }) {
 
 // ── Section: Statistiken ──────────────────────────────────────────────────────
 function StatsSection({ applications }: { applications: Application[] }) {
-  const weeks = ['KW 18', 'KW 19', 'KW 20', 'KW 21', 'KW 22', 'KW 23']
-  const counts = [2, 5, 3, 8, 4, applications.length > 0 ? applications.length : 6]
-  const maxCount = Math.max(...counts, 1)
+  // Build real weekly counts from applications.created_at (last 6 weeks)
+  const weekData = useMemo(() => {
+    const now = new Date()
+    return Array.from({ length: 6 }, (_, i) => {
+      const weekStart = new Date(now)
+      weekStart.setDate(now.getDate() - (5 - i) * 7 - now.getDay())
+      weekStart.setHours(0, 0, 0, 0)
+      const weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate() + 7)
+      const count = applications.filter(a => {
+        const d = new Date(a.created_at)
+        return d >= weekStart && d < weekEnd
+      }).length
+      const kw = (() => {
+        const d = new Date(weekStart); d.setHours(12)
+        const jan1 = new Date(d.getFullYear(), 0, 1)
+        return 'KW ' + Math.ceil(((d.getTime() - jan1.getTime()) / 86400000 + jan1.getDay() + 1) / 7)
+      })()
+      return { label: kw, count }
+    })
+  }, [applications])
+
+  const maxCount = Math.max(...weekData.map(w => w.count), 1)
+  const statusCounts = APP_STATUSES.reduce((acc, s) => {
+    acc[s] = applications.filter(a => (((a as unknown as Record<string, unknown>).status as string) || 'Gesendet') === s).length
+    return acc
+  }, {} as Record<string, number>)
+  const interviews = statusCounts['Interview'] || 0
+  const offers = statusCounts['Angebot'] || 0
 
   return (
     <div style={{ maxWidth: 760 }}>
       <h2 style={{ fontSize: 22, fontWeight: 700, color: C.white, marginBottom: 8 }}>Statistiken</h2>
-      <p style={{ fontSize: 13, color: C.mid, marginBottom: 24 }}>Dein Bewerbungsfortschritt auf einen Blick.</p>
+      <p style={{ fontSize: 13, color: C.mid, marginBottom: 24 }}>Dein Bewerbungsfortschritt — echte Daten aus deinem Account.</p>
 
-      {/* Summary */}
+      {/* Summary cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 28 }}>
-        {[['📤', String(applications.length), 'Bewerbungen'], ['✉️', '28%', 'Antwortrate'], ['💬', '3', 'Interviews'], ['⭐', '85%', 'Ø Match']].map(([icon, val, label]) => (
+        {[
+          ['📤', String(applications.length), 'Bewerbungen', ''],
+          ['💬', String(interviews), 'Interviews', interviews > 0 ? `${Math.round(interviews / Math.max(applications.length, 1) * 100)}% Quote` : ''],
+          ['🎉', String(offers), 'Angebote', offers > 0 ? 'Glückwunsch!' : ''],
+          ['❌', String(statusCounts['Abgelehnt'] || 0), 'Abgelehnt', ''],
+        ].map(([icon, val, label, sub]) => (
           <div key={label} style={{ padding: '16px', borderRadius: 12, background: 'rgba(255,255,255,0.02)', border: `0.5px solid ${C.border}`, textAlign: 'center' }}>
             <div style={{ fontSize: 18, marginBottom: 6 }}>{icon}</div>
             <div style={{ fontSize: 22, fontWeight: 700, color: C.white, marginBottom: 3 }}>{val}</div>
             <div style={{ fontSize: 11, color: C.mid }}>{label}</div>
+            {sub && <div style={{ fontSize: 10, color: C.success, marginTop: 3 }}>{sub}</div>}
           </div>
         ))}
       </div>
 
-      {/* Bar chart */}
-      <div style={{ padding: '24px', borderRadius: 14, border: `0.5px solid ${C.border}`, background: 'rgba(255,255,255,0.01)', marginBottom: 20 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: C.white, marginBottom: 20 }}>Bewerbungen pro Woche</div>
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, height: 120 }}>
-          {counts.map((c, i) => (
-            <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-              <div style={{ fontSize: 11, color: C.white, fontWeight: 600 }}>{c}</div>
-              <div style={{ width: '100%', height: (c / maxCount) * 80, borderRadius: '4px 4px 0 0', background: `linear-gradient(180deg, ${C.navy3}, ${C.navy})`, minHeight: 4, transition: 'height .4s' }} />
-              <div style={{ fontSize: 10, color: C.mid }}>{weeks[i]}</div>
+      {/* Status breakdown */}
+      <div style={{ padding: '20px 24px', borderRadius: 14, border: `0.5px solid ${C.border}`, background: 'rgba(255,255,255,0.01)', marginBottom: 20 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: C.white, marginBottom: 16 }}>Status-Übersicht</div>
+        {APP_STATUSES.map(s => {
+          const count = statusCounts[s] || 0
+          const pct = applications.length > 0 ? (count / applications.length) * 100 : 0
+          return (
+            <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+              <span style={{ fontSize: 12, color: STATUS_COLORS[s], width: 80, flexShrink: 0 }}>{s}</span>
+              <div style={{ flex: 1, height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+                <div style={{ width: `${pct}%`, height: '100%', borderRadius: 3, background: STATUS_COLORS[s], transition: 'width .6s' }} />
+              </div>
+              <span style={{ fontSize: 11, color: C.mid, width: 28, textAlign: 'right' }}>{count}</span>
             </div>
-          ))}
-        </div>
+          )
+        })}
       </div>
 
-      {/* Line chart: Match score */}
-      <div style={{ padding: '24px', borderRadius: 14, border: `0.5px solid ${C.border}`, background: 'rgba(255,255,255,0.01)' }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: C.white, marginBottom: 16 }}>Profil Match-Score über Zeit</div>
-        <svg width="100%" height={80} viewBox="0 0 400 80">
-          <polyline points="0,60 66,52 132,45 200,38 266,32 334,28 400,22" fill="none" stroke={C.success} strokeWidth={2.5} strokeLinejoin="round" />
-          {[60, 52, 45, 38, 32, 28, 22].map((y, i) => (
-            <circle key={i} cx={i * 66.6} cy={y} r={4} fill={C.success} />
-          ))}
-        </svg>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
-          {weeks.concat(['Heute']).map(w => <span key={w} style={{ fontSize: 10, color: C.mid }}>{w}</span>)}
-        </div>
+      {/* Bar chart: real weekly data */}
+      <div style={{ padding: '24px', borderRadius: 14, border: `0.5px solid ${C.border}`, background: 'rgba(255,255,255,0.01)', marginBottom: 20 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: C.white, marginBottom: 20 }}>Bewerbungen pro Woche</div>
+        {applications.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '2rem', color: C.mid, fontSize: 13 }}>Noch keine Daten — sende deine erste Bewerbung!</div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, height: 100 }}>
+            {weekData.map((w, i) => (
+              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                <div style={{ fontSize: 11, color: C.white, fontWeight: 600, opacity: w.count > 0 ? 1 : 0.3 }}>{w.count || ''}</div>
+                <div style={{ width: '100%', height: Math.max((w.count / maxCount) * 76, w.count > 0 ? 4 : 2), borderRadius: '4px 4px 0 0', background: w.count > 0 ? `linear-gradient(180deg, ${C.navy3}, ${C.navy})` : 'rgba(255,255,255,0.06)', transition: 'height .4s' }} />
+                <div style={{ fontSize: 10, color: C.mid }}>{w.label}</div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
+
+      {applications.length === 0 && (
+        <div style={{ padding: '20px 24px', borderRadius: 14, border: `0.5px solid ${C.border}`, background: 'rgba(255,255,255,0.01)', textAlign: 'center', color: C.mid, fontSize: 13 }}>
+          <div style={{ fontSize: 36, marginBottom: 10 }}>📊</div>
+          Sobald du Bewerbungen erfasst, erscheinen hier deine echten Statistiken.
+        </div>
+      )}
     </div>
   )
 }
@@ -2076,6 +2213,7 @@ export default function DashboardClient({ profile, applications, justUpgraded }:
   const [activeNav, setActiveNav] = useState<NavId>('dashboard')
   const [selectedJob, setSelectedJob] = useState<ReturnType<typeof makeMockJobs>[0] | null>(null)
   const [showUpgrade, setShowUpgrade] = useState(false)
+  const [globalSearch, setGlobalSearch] = useState('')
   const supabase = createClient()
   const router = useRouter()
   const isPro = !!profile.is_pro
@@ -2090,7 +2228,7 @@ export default function DashboardClient({ profile, applications, justUpgraded }:
 
   function renderContent() {
     switch (activeNav) {
-      case 'jobs': return <JobsSection jobs={mockJobs} isPro={isPro} onSelect={j => setSelectedJob(j)} onNeedPro={() => setShowUpgrade(true)} />
+      case 'jobs': return <JobsSection jobs={mockJobs} isPro={isPro} onSelect={j => setSelectedJob(j)} onNeedPro={() => setShowUpgrade(true)} initialSearch={globalSearch} />
       case 'applications': return <ApplicationsSection applications={applications} profile={profile} />
       case 'cv': return <CVSection profile={profile} isPro={isPro} />
       case 'letter': return <LetterSection profile={profile} isPro={isPro} onNeedPro={() => setShowUpgrade(true)} />
@@ -2188,7 +2326,7 @@ export default function DashboardClient({ profile, applications, justUpgraded }:
         <Sidebar active={activeNav} onNav={setActiveNav} profile={profile} isPro={isPro} onUpgrade={() => setShowUpgrade(true)} onLogout={handleLogout} />
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-          <TopBar profile={profile} isPro={isPro} onUpgrade={() => setShowUpgrade(true)} onNav={setActiveNav} />
+          <TopBar profile={profile} isPro={isPro} onUpgrade={() => setShowUpgrade(true)} onNav={setActiveNav} onSearch={term => { setGlobalSearch(term); setActiveNav('jobs') }} />
 
           <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
             <main style={{ flex: 1, overflowY: 'auto', padding: '28px 32px' }}>
