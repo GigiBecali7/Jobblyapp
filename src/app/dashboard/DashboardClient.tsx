@@ -997,7 +997,6 @@ function CVSection({ profile, isPro }: { profile: UserProfile; isPro: boolean })
 // ── Section: Anschreiben ──────────────────────────────────────────────────────
 function LetterSection({ profile, isPro, onNeedPro }: { profile: UserProfile; isPro: boolean; onNeedPro: () => void }) {
   const supabase = createClient()
-  const router = useRouter()
   const p = profile as UserProfile & Record<string, unknown>
   const [jobTitle, setJobTitle] = useState('')
   const [company, setCompany] = useState('')
@@ -1044,6 +1043,10 @@ function LetterSection({ profile, isPro, onNeedPro }: { profile: UserProfile; is
         }),
       })
       const data = await res.json()
+      if (!res.ok) {
+        alert(data.error || 'Fehler beim Generieren. Bitte versuche es erneut.')
+        return
+      }
       setLetter(data.coverLetter || '')
       const newCount = genCount + 1
       setGenCount(newCount)
