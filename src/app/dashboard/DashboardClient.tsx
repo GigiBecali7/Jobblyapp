@@ -1217,6 +1217,13 @@ function ProfileSection({ profile }: { profile: UserProfile }) {
     email_frequency: String(p.email_frequency || 'daily'),
   })
 
+  function openFilePicker() {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+      fileInputRef.current.click()
+    }
+  }
+
   function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -1260,131 +1267,256 @@ function ProfileSection({ profile }: { profile: UserProfile }) {
   const initials = ((profile.first_name || '?').charAt(0) + (profile.last_name || '').charAt(0)).toUpperCase()
   const currentPhoto = photoPreview || existingAvatar || null
 
+  // Profile completion score
+  const completionFields = [form.first_name, form.last_name, form.phone, form.city, form.linkedin, prefs.industry, prefs.position, currentPhoto]
+  const completionScore = Math.round((completionFields.filter(Boolean).length / completionFields.length) * 100)
+
+  const inStyle: React.CSSProperties = {
+    width: '100%', padding: '10px 14px', minHeight: 44, borderRadius: 9,
+    border: '0.5px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)',
+    color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+  }
+  const inDisabledStyle: React.CSSProperties = {
+    ...inStyle, borderColor: 'rgba(255,255,255,0.05)', background: 'rgba(255,255,255,0.02)',
+    color: C.mid, cursor: 'not-allowed',
+  }
+
   type FormKey = keyof typeof form
   const field = (label: string, key: FormKey, type = 'text', placeholder = '', disabled = false) => (
     <div style={{ marginBottom: 14 }}>
       <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 6, fontWeight: 500 }}>{label}</label>
-      <input type={type} value={form[key]} onChange={e => setForm(prev => ({ ...prev, [key]: e.target.value }))} placeholder={placeholder} disabled={disabled}
-        style={{ width: '100%', padding: '10px 14px', minHeight: 44, borderRadius: 9, border: `0.5px solid ${disabled ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.1)'}`, background: disabled ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.04)', color: disabled ? C.mid : C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none', cursor: disabled ? 'not-allowed' : 'text' }} />
+      <input className="profile-input" type={type} value={form[key]}
+        onChange={e => setForm(prev => ({ ...prev, [key]: e.target.value }))}
+        placeholder={placeholder} disabled={disabled}
+        style={disabled ? inDisabledStyle : inStyle} />
     </div>
   )
 
   const Block = ({ title, children }: { title: string; children: React.ReactNode }) => (
-    <div style={{ marginBottom: 20, padding: '20px 24px', borderRadius: 14, border: `0.5px solid ${C.border}`, background: 'rgba(255,255,255,0.01)' }}>
-      <div style={{ fontSize: 14, fontWeight: 700, color: C.white, marginBottom: 16, paddingBottom: 12, borderBottom: `0.5px solid ${C.border}` }}>{title}</div>
+    <div style={{ marginBottom: 16, padding: '20px 22px', borderRadius: 14, border: `0.5px solid ${C.border}`, background: 'rgba(255,255,255,0.01)' }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: C.white, marginBottom: 16, paddingBottom: 12, borderBottom: `0.5px solid ${C.border}` }}>{title}</div>
       {children}
     </div>
   )
 
   return (
     <div style={{ width: '100%' }}>
+      {/* Hidden file input */}
       <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }} onChange={handlePhotoChange} />
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-        <h2 style={{ fontSize: 22, fontWeight: 700, color: C.white }}>Meine Daten</h2>
-        {saved && <span style={{ fontSize: 12, color: C.success, background: 'rgba(13,43,26,0.8)', border: '0.5px solid #2A6B47', borderRadius: 8, padding: '4px 12px' }}>✓ Gespeichert</span>}
-      </div>
 
-      {/* Photo */}
-      <Block title="Profilfoto">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-          <div onClick={() => fileInputRef.current?.click()}
-            style={{ width: 80, height: 80, borderRadius: '50%', background: currentPhoto ? 'transparent' : 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, fontWeight: 700, color: C.white, flexShrink: 0, cursor: 'pointer', overflow: 'hidden', border: `2px solid rgba(99,102,241,0.4)`, position: 'relative' }}
-            title="Foto hochladen">
-            {currentPhoto ? <img src={currentPhoto} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : initials}
-            <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, transition: 'background .2s' }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.5)'; (e.currentTarget.nextSibling as HTMLElement | null)?.childNodes }}
-            >
-              <span style={{ opacity: 0, fontSize: 20 }}>📷</span>
+      {/* Toast */}
+      {saved && <div className="profile-save-toast">Gespeichert ✓</div>}
+
+      <h2 style={{ fontSize: 22, fontWeight: 700, color: C.white, marginBottom: 24 }}>Meine Daten</h2>
+
+      <div className="profile-layout">
+        {/* ── Left column: all form blocks ── */}
+        <div>
+          {/* Photo */}
+          <Block title="Profilfoto">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
+              {/* Avatar circle — clicking opens picker */}
+              <div className="profile-avatar-circle"
+                onClick={openFilePicker}
+                style={{ background: currentPhoto ? 'transparent' : 'linear-gradient(135deg, #6366f1, #8b5cf6)', fontSize: 28, fontWeight: 700, color: C.white }}
+                title="Foto ändern">
+                {currentPhoto
+                  ? <img src={currentPhoto} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                  : <span>{initials}</span>}
+                <div className="avatar-overlay">
+                  <span className="avatar-icon">📷</span>
+                </div>
+              </div>
+              <div>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+                  <button onClick={openFilePicker}
+                    style={{ padding: '8px 16px', minHeight: 38, borderRadius: 9, background: 'rgba(27,46,107,0.3)', color: C.navy3, border: `0.5px solid rgba(27,46,107,0.4)`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600 }}>
+                    📷 Foto hochladen
+                  </button>
+                  {currentPhoto && (
+                    <button onClick={deletePhoto}
+                      style={{ padding: '8px 14px', minHeight: 38, borderRadius: 9, background: 'rgba(248,113,113,0.08)', color: '#f87171', border: '0.5px solid rgba(248,113,113,0.25)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13 }}>
+                      Foto löschen
+                    </button>
+                  )}
+                </div>
+                <div style={{ fontSize: 11, color: C.mid }}>JPG, PNG oder WebP · max. 5 MB</div>
+              </div>
+            </div>
+          </Block>
+
+          {/* Personal info */}
+          <Block title="Persönliche Angaben">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+              {field('Vorname', 'first_name', 'text', 'Max')}
+              {field('Nachname', 'last_name', 'text', 'Mustermann')}
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 6, fontWeight: 500 }}>E-Mail</label>
+              <input type="email" value={profile.email} disabled className="profile-input" style={inDisabledStyle} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+              {field('Telefon', 'phone', 'tel', '+43 ...')}
+              {field('Stadt', 'city', 'text', 'Wien')}
+            </div>
+            {field('LinkedIn', 'linkedin', 'url', 'https://linkedin.com/in/...')}
+            {field('Geburtstag', 'birthday', 'date')}
+          </Block>
+
+          {/* Job preferences */}
+          <Block title="Job-Präferenzen">
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 6, fontWeight: 500 }}>Branche</label>
+              <input className="profile-input" value={prefs.industry}
+                onChange={e => setPrefs(pr => ({ ...pr, industry: e.target.value }))}
+                placeholder="z.B. IT & Technologie" style={inStyle} />
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 6, fontWeight: 500 }}>Wunschposition</label>
+              <input className="profile-input" value={prefs.position}
+                onChange={e => setPrefs(pr => ({ ...pr, position: e.target.value }))}
+                placeholder="z.B. Product Manager" style={inStyle} />
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 8, fontWeight: 500 }}>Arbeitsmodell</label>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {[['remote', '🏠 Remote'], ['hybrid', '🔄 Hybrid'], ['office', '🏢 Vor Ort']].map(([v, l]) => (
+                  <button key={v} onClick={() => setPrefs(pr => ({ ...pr, work_model: v }))}
+                    style={{ flex: 1, minWidth: 90, minHeight: 40, padding: '9px 6px', borderRadius: 9, border: `0.5px solid ${prefs.work_model === v ? C.navy2 : 'rgba(255,255,255,0.1)'}`, background: prefs.work_model === v ? 'rgba(27,46,107,0.3)' : 'transparent', color: prefs.work_model === v ? C.navy3 : C.mid, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 500, transition: 'all .15s' }}>{l}</button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 8, fontWeight: 500 }}>Wunschgehalt: <strong style={{ color: C.white }}>{prefs.salary_target.toLocaleString('de')} €</strong></label>
+              <input type="range" min={25000} max={150000} step={5000} value={prefs.salary_target}
+                onChange={e => setPrefs(pr => ({ ...pr, salary_target: Number(e.target.value) }))}
+                style={{ width: '100%', accentColor: C.purple, cursor: 'pointer' }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: C.mid, marginTop: 4 }}>
+                <span>25.000 €</span><span>150.000 €</span>
+              </div>
+            </div>
+          </Block>
+
+          {/* Notifications */}
+          <Block title="Benachrichtigungen">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <div>
+                <div style={{ fontSize: 13, color: C.white, fontWeight: 500 }}>Job-Alerts</div>
+                <div style={{ fontSize: 11, color: C.mid }}>Benachrichtigt bei passenden Jobs</div>
+              </div>
+              <button onClick={() => setNotifications(n => ({ ...n, job_alerts: !n.job_alerts }))}
+                style={{ width: 44, height: 24, borderRadius: 12, background: notifications.job_alerts ? C.navy : 'rgba(255,255,255,0.1)', border: 'none', cursor: 'pointer', position: 'relative', transition: 'background .2s', flexShrink: 0 }}>
+                <div style={{ width: 18, height: 18, borderRadius: '50%', background: C.white, position: 'absolute', top: 3, left: notifications.job_alerts ? 23 : 3, transition: 'left .2s' }} />
+              </button>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 8, fontWeight: 500 }}>E-Mail-Häufigkeit</label>
+              <select value={notifications.email_frequency}
+                onChange={e => setNotifications(n => ({ ...n, email_frequency: e.target.value }))}
+                className="profile-input"
+                style={{ ...inStyle, cursor: 'pointer' }}>
+                <option value="instant">Sofort</option>
+                <option value="daily">Täglich</option>
+                <option value="weekly">Wöchentlich</option>
+              </select>
+            </div>
+          </Block>
+
+          {/* Account */}
+          <Block title="Konto">
+            {pwSent ? (
+              <div style={{ fontSize: 12, color: C.success, padding: '8px 14px', background: 'rgba(13,43,26,0.8)', border: '0.5px solid #2A6B47', borderRadius: 8, display: 'inline-block' }}>✓ Reset-Link wurde gesendet</div>
+            ) : (
+              <button onClick={sendPwReset} disabled={pwLoading}
+                style={{ padding: '9px 18px', minHeight: 44, borderRadius: 9, background: 'rgba(255,255,255,0.05)', color: C.mid, border: `0.5px solid ${C.border}`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13 }}>
+                {pwLoading ? 'Wird gesendet…' : '🔑 Passwort ändern'}
+              </button>
+            )}
+          </Block>
+
+          <button onClick={save} disabled={saving}
+            style={{ width: '100%', padding: 15, minHeight: 50, borderRadius: 10, background: saving ? 'rgba(255,255,255,0.06)' : `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: saving ? C.mid : C.white, border: 'none', cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            {saving ? (photoUploading ? '📷 Foto hochladen…' : 'Speichern…') : '💾 Änderungen speichern'}
+          </button>
+        </div>
+
+        {/* ── Right column: profile summary + tips (desktop only) ── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Completion card */}
+          <div style={{ padding: '20px 22px', borderRadius: 14, border: `0.5px solid ${C.border}`, background: 'rgba(255,255,255,0.01)' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.white, marginBottom: 14 }}>Profil-Vollständigkeit</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14 }}>
+              {/* Ring */}
+              <svg width={64} height={64} viewBox="0 0 64 64" style={{ flexShrink: 0 }}>
+                <circle cx={32} cy={32} r={26} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={6} />
+                <circle cx={32} cy={32} r={26} fill="none" stroke={completionScore >= 80 ? C.success : C.navy3} strokeWidth={6}
+                  strokeDasharray={`${2 * Math.PI * 26}`}
+                  strokeDashoffset={`${2 * Math.PI * 26 * (1 - completionScore / 100)}`}
+                  strokeLinecap="round" transform="rotate(-90 32 32)" style={{ transition: 'stroke-dashoffset .6s' }} />
+                <text x={32} y={36} textAnchor="middle" fill={C.white} fontSize={13} fontWeight={700}>{completionScore}%</text>
+              </svg>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: C.white, marginBottom: 4 }}>
+                  {completionScore === 100 ? 'Perfekt!' : completionScore >= 70 ? 'Fast fertig!' : 'Ausbaufähig'}
+                </div>
+                <div style={{ fontSize: 11, color: C.mid, lineHeight: 1.5 }}>
+                  {completionScore < 100 ? 'Fülle alle Felder aus für mehr Job-Matches.' : 'Dein Profil ist vollständig ausgefüllt.'}
+                </div>
+              </div>
+            </div>
+            {/* Field checklist */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {[
+                [form.first_name && form.last_name, 'Vor- & Nachname'],
+                [currentPhoto, 'Profilfoto'],
+                [form.phone, 'Telefonnummer'],
+                [form.city, 'Stadt'],
+                [form.linkedin, 'LinkedIn'],
+                [prefs.industry, 'Branche'],
+                [prefs.position, 'Wunschposition'],
+              ].map(([done, label]) => (
+                <div key={String(label)} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+                  <span style={{ color: done ? C.success : 'rgba(255,255,255,0.2)', fontSize: 14 }}>{done ? '✓' : '○'}</span>
+                  <span style={{ color: done ? 'rgba(255,255,255,0.7)' : C.mid }}>{String(label)}</span>
+                </div>
+              ))}
             </div>
           </div>
-          <div>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-              <button onClick={() => fileInputRef.current?.click()} style={{ padding: '7px 14px', borderRadius: 8, background: 'rgba(27,46,107,0.3)', color: C.navy3, border: `0.5px solid rgba(27,46,107,0.4)`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600 }}>📷 Foto hochladen</button>
-              {currentPhoto && <button onClick={deletePhoto} style={{ padding: '7px 12px', borderRadius: 8, background: 'rgba(248,113,113,0.08)', color: '#f87171', border: '0.5px solid rgba(248,113,113,0.25)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12 }}>Foto löschen</button>}
-            </div>
-            <div style={{ fontSize: 11, color: C.mid }}>JPG, PNG bis 5 MB · Klicke auf das Foto oder den Button</div>
+
+          {/* Tips card */}
+          <div style={{ padding: '20px 22px', borderRadius: 14, border: `0.5px solid ${C.border}`, background: 'rgba(255,255,255,0.01)' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.white, marginBottom: 12 }}>💡 Tipps</div>
+            {[
+              ['📷', 'Profilbild erhöht Rückrufe um bis zu 30 %'],
+              ['🔗', 'LinkedIn-Link zeigt Recruitern dein Netzwerk'],
+              ['💰', 'Wunschgehalt hilft uns, passende Jobs zu filtern'],
+              ['🔔', 'Job-Alerts – damit du nichts verpasst'],
+            ].map(([icon, tip]) => (
+              <div key={String(tip)} style={{ display: 'flex', gap: 10, marginBottom: 10, fontSize: 12, color: C.mid, lineHeight: 1.5 }}>
+                <span style={{ flexShrink: 0 }}>{String(icon)}</span>
+                <span>{String(tip)}</span>
+              </div>
+            ))}
           </div>
-        </div>
-      </Block>
 
-      {/* Personal info */}
-      <Block title="Persönliche Angaben">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
-          {field('Vorname', 'first_name', 'text', 'Max')}
-          {field('Nachname', 'last_name', 'text', 'Mustermann')}
-        </div>
-        <div style={{ marginBottom: 14 }}>
-          <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 6, fontWeight: 500 }}>Email</label>
-          <input type="email" value={profile.email} disabled style={{ width: '100%', padding: '10px 14px', minHeight: 44, borderRadius: 9, border: '0.5px solid rgba(255,255,255,0.05)', background: 'rgba(255,255,255,0.02)', color: C.mid, fontFamily: 'inherit', fontSize: 13, outline: 'none', cursor: 'not-allowed' }} />
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
-          {field('Telefon', 'phone', 'tel', '+43 ...')}
-          {field('Stadt', 'city', 'text', 'Wien')}
-        </div>
-        {field('LinkedIn', 'linkedin', 'url', 'https://linkedin.com/in/...')}
-        {field('Geburtstag', 'birthday', 'date')}
-      </Block>
-
-      {/* Job preferences */}
-      <Block title="Job-Präferenzen">
-        <div style={{ marginBottom: 14 }}>
-          <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 6, fontWeight: 500 }}>Branche</label>
-          <input value={prefs.industry} onChange={e => setPrefs(pr => ({ ...pr, industry: e.target.value }))} placeholder="z.B. IT & Technologie" style={{ width: '100%', padding: '10px 14px', minHeight: 44, borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.04)', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none' }} />
-        </div>
-        <div style={{ marginBottom: 14 }}>
-          <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 6, fontWeight: 500 }}>Wunschposition</label>
-          <input value={prefs.position} onChange={e => setPrefs(pr => ({ ...pr, position: e.target.value }))} placeholder="z.B. Product Manager" style={{ width: '100%', padding: '10px 14px', minHeight: 44, borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.04)', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none' }} />
-        </div>
-        <div style={{ marginBottom: 14 }}>
-          <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 8, fontWeight: 500 }}>Arbeitsmodell</label>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {[['remote', '🏠 Remote'], ['hybrid', '🔄 Hybrid'], ['office', '🏢 Vor Ort']].map(([v, l]) => (
-              <button key={v} onClick={() => setPrefs(pr => ({ ...pr, work_model: v }))} style={{ flex: 1, minWidth: 100, padding: '9px', borderRadius: 9, border: `0.5px solid ${prefs.work_model === v ? C.navy2 : 'rgba(255,255,255,0.1)'}`, background: prefs.work_model === v ? 'rgba(27,46,107,0.3)' : 'transparent', color: prefs.work_model === v ? C.navy3 : C.mid, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 500, transition: 'all .15s' }}>{l}</button>
+          {/* Quick info preview */}
+          <div style={{ padding: '20px 22px', borderRadius: 14, border: `0.5px solid ${C.border}`, background: 'rgba(27,46,107,0.06)' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.white, marginBottom: 12 }}>Kurzübersicht</div>
+            {[
+              ['👤', [form.first_name, form.last_name].filter(Boolean).join(' ') || '—'],
+              ['📍', form.city || '—'],
+              ['💼', prefs.position || '—'],
+              ['🏢', prefs.industry || '—'],
+              ['💶', prefs.salary_target ? prefs.salary_target.toLocaleString('de') + ' €' : '—'],
+            ].map(([icon, val]) => (
+              <div key={String(icon)} style={{ display: 'flex', gap: 10, marginBottom: 8, alignItems: 'flex-start' }}>
+                <span style={{ fontSize: 13, flexShrink: 0 }}>{String(icon)}</span>
+                <span style={{ fontSize: 12, color: String(val) === '—' ? C.mid : 'rgba(255,255,255,0.75)', lineHeight: 1.5 }}>{String(val)}</span>
+              </div>
             ))}
           </div>
         </div>
-        <div>
-          <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 8, fontWeight: 500 }}>Wunschgehalt: {prefs.salary_target.toLocaleString('de')} €</label>
-          <input type="range" min={25000} max={150000} step={5000} value={prefs.salary_target} onChange={e => setPrefs(pr => ({ ...pr, salary_target: Number(e.target.value) }))}
-            style={{ width: '100%', accentColor: C.purple, cursor: 'pointer' }} />
-        </div>
-      </Block>
-
-      {/* Notifications */}
-      <Block title="Benachrichtigungen">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <div>
-            <div style={{ fontSize: 13, color: C.white, fontWeight: 500 }}>Job-Alerts</div>
-            <div style={{ fontSize: 11, color: C.mid }}>Sofort benachrichtigt wenn passende Jobs erscheinen</div>
-          </div>
-          <button onClick={() => setNotifications(n => ({ ...n, job_alerts: !n.job_alerts }))} style={{ width: 44, height: 24, borderRadius: 12, background: notifications.job_alerts ? C.navy : 'rgba(255,255,255,0.1)', border: 'none', cursor: 'pointer', position: 'relative', transition: 'background .2s', flexShrink: 0 }}>
-            <div style={{ width: 18, height: 18, borderRadius: '50%', background: C.white, position: 'absolute', top: 3, left: notifications.job_alerts ? 23 : 3, transition: 'left .2s' }} />
-          </button>
-        </div>
-        <div>
-          <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 8, fontWeight: 500 }}>E-Mail-Häufigkeit</label>
-          <select value={notifications.email_frequency} onChange={e => setNotifications(n => ({ ...n, email_frequency: e.target.value }))} style={{ padding: '9px 14px', minHeight: 44, borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: '#0D1117', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none', cursor: 'pointer' }}>
-            <option value="instant">Sofort</option>
-            <option value="daily">Täglich</option>
-            <option value="weekly">Wöchentlich</option>
-          </select>
-        </div>
-      </Block>
-
-      {/* Account */}
-      <Block title="Konto">
-        <div style={{ marginBottom: 14 }}>
-          {pwSent ? (
-            <div style={{ fontSize: 12, color: C.success, padding: '8px 14px', background: 'rgba(13,43,26,0.8)', border: '0.5px solid #2A6B47', borderRadius: 8, display: 'inline-block' }}>✓ Reset-Link wurde gesendet</div>
-          ) : (
-            <button onClick={sendPwReset} disabled={pwLoading} style={{ padding: '9px 16px', minHeight: 44, borderRadius: 9, background: 'rgba(255,255,255,0.05)', color: C.mid, border: `0.5px solid ${C.border}`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13 }}>{pwLoading ? 'Wird gesendet…' : '🔑 Passwort ändern'}</button>
-          )}
-        </div>
-      </Block>
-
-      <button onClick={save} disabled={saving} style={{ width: '100%', padding: 14, borderRadius: 10, background: saving ? 'rgba(255,255,255,0.06)' : `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: saving ? C.mid : C.white, border: 'none', cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-        {saving ? (photoUploading ? '📷 Foto wird hochgeladen…' : 'Wird gespeichert…') : 'Änderungen speichern'}
-      </button>
+      </div>
     </div>
   )
 }
