@@ -1578,48 +1578,97 @@ function StatsSection({ applications }: { applications: Application[] }) {
 function SettingsSection({ profile, isPro, onUpgrade }: { profile: UserProfile; isPro: boolean; onUpgrade: () => void }) {
   const supabase = createClient()
   const router = useRouter()
+  const p = profile as UserProfile & Record<string, unknown>
 
-  const [theme, setThemeState] = useState(() => typeof window !== 'undefined' ? localStorage.getItem('jobbly_theme') || 'dark' : 'dark')
-  const [language, setLanguageState] = useState(() => {
-    if (typeof window === 'undefined') return 'de'
+  // ── Theme ──
+  const [theme, setThemeState] = useState<string>('dark')
+  useEffect(() => {
+    const saved = localStorage.getItem('jobbly_theme') || 'dark'
+    setThemeState(saved)
+    applyThemeToDom(saved)
+  }, [])
+
+  function applyThemeToDom(t: string) {
+    const html = document.documentElement
+    html.classList.remove('theme-light')
+    if (t === 'light') html.classList.add('theme-light')
+    else if (t === 'system') {
+      if (!window.matchMedia('(prefers-color-scheme: dark)').matches) html.classList.add('theme-light')
+    }
+  }
+
+  function applyTheme(t: string) {
+    applyThemeToDom(t)
+    localStorage.setItem('jobbly_theme', t)
+    setThemeState(t)
+    supabase.from('profiles').update({ theme_preference: t } as Record<string, unknown>).eq('id', profile.id).then(() => {})
+    showToast('Design gespeichert ✓')
+  }
+
+  // ── Language ──
+  const detectLang = () => {
     const saved = localStorage.getItem('jobbly_lang')
     if (saved) return saved
-    const br = navigator.language.toLowerCase()
-    if (br.startsWith('de')) return 'de'
+    const br = (navigator.language || 'de').toLowerCase()
     if (br.startsWith('tr')) return 'tr'
     if (br.startsWith('es')) return 'es'
     if (br.startsWith('fr')) return 'fr'
     if (br.startsWith('pl')) return 'pl'
-    return 'en'
-  })
-  const [emailAlerts, setEmailAlerts] = useState(true)
-  const [showToRecruiters, setShowToRecruiters] = useState(false)
-  const [matchThreshold, setMatchThreshold] = useState('70')
-  const [portalLoading, setPortalLoading] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-  const [pwLoading, setPwLoading] = useState(false)
-  const [pwSent, setPwSent] = useState(false)
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [deleting, setDeleting] = useState(false)
-
-  function applyTheme(t: string) {
-    const html = document.documentElement
-    html.classList.remove('theme-light', 'theme-dark', 'theme-system')
-    if (t === 'light') html.classList.add('theme-light')
-    else if (t === 'system') {
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-      if (!prefersDark) html.classList.add('theme-light')
-    }
-    localStorage.setItem('jobbly_theme', t)
-    setThemeState(t)
+    if (br.startsWith('en')) return 'en'
+    return 'de'
   }
+  const [language, setLanguageState] = useState<string>('de')
+  useEffect(() => { setLanguageState(detectLang()) }, [])
 
   function applyLanguage(l: string) {
     localStorage.setItem('jobbly_lang', l)
     setLanguageState(l)
-    supabase.from('profiles').update({ preferred_lang: l } as Record<string, unknown>).eq('id', profile.id).then(() => {})
+    supabase.from('profiles').update({ preferred_lang: l } as Record<string, unknown>).eq('id', profile.id).then(() => {
+      // Reload so all translated strings re-render from localStorage
+      window.location.reload()
+    })
   }
+
+  // ── Notifications (init from profile) ──
+  const [emailAlerts, setEmailAlerts] = useState<boolean>(Boolean(p.job_alerts ?? true))
+  const [matchThreshold, setMatchThreshold] = useState<string>(String(p.match_threshold || '70'))
+
+  async function saveNotifications(alerts: boolean, threshold: string) {
+    await supabase.from('profiles').update({ job_alerts: alerts, match_threshold: threshold } as Record<string, unknown>).eq('id', profile.id)
+    showToast('Benachrichtigungen gespeichert ✓')
+  }
+
+  function toggleEmailAlerts(v: boolean) {
+    setEmailAlerts(v)
+    saveNotifications(v, matchThreshold)
+  }
+
+  function changeThreshold(v: string) {
+    setMatchThreshold(v)
+    saveNotifications(emailAlerts, v)
+  }
+
+  // ── Privacy (init from profile) ──
+  const [showToRecruiters, setShowToRecruiters] = useState<boolean>(Boolean(p.visible_to_recruiters ?? false))
+
+  function toggleRecruiters(v: boolean) {
+    setShowToRecruiters(v)
+    supabase.from('profiles').update({ visible_to_recruiters: v } as Record<string, unknown>).eq('id', profile.id).then(() => {})
+    showToast(v ? 'Profil sichtbar für Recruiter ✓' : 'Profil verborgen ✓')
+  }
+
+  // ── Toast ──
+  const [toast, setToast] = useState('')
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  function showToast(msg: string) {
+    setToast(msg)
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(''), 2800)
+  }
+
+  // ── Subscription / Stripe ──
+  const [portalLoading, setPortalLoading] = useState(false)
+  const [checkoutLoading, setCheckoutLoading] = useState(false)
 
   async function openPortal() {
     setPortalLoading(true)
@@ -1627,26 +1676,39 @@ function SettingsSection({ profile, isPro, onUpgrade }: { profile: UserProfile; 
       const res = await fetch('/api/stripe/portal', { method: 'POST' })
       const data = await res.json()
       if (data.url) window.location.href = data.url
+      else showToast('Stripe Portal nicht verfügbar')
     } finally { setPortalLoading(false) }
   }
 
-  async function handleSave() {
-    setSaving(true)
+  async function openCheckout() {
+    setCheckoutLoading(true)
     try {
-      await supabase.from('profiles').update({
-        job_alerts: emailAlerts,
-        match_threshold: matchThreshold,
-        visible_to_recruiters: showToRecruiters,
-      } as Record<string, unknown>).eq('id', profile.id)
-      setSaved(true); setTimeout(() => setSaved(false), 3000)
-    } finally { setSaving(false) }
+      const res = await fetch('/api/stripe/checkout', { method: 'POST' })
+      const data = await res.json()
+      if (data.url) window.location.href = data.url
+      else showToast('Checkout nicht verfügbar')
+    } finally { setCheckoutLoading(false) }
   }
+
+  // ── Security ──
+  const [pwLoading, setPwLoading] = useState(false)
+  const [pwSent, setPwSent] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [sessionInfo] = useState(() => {
+    if (typeof window === 'undefined') return { ua: '', time: '' }
+    const ua = navigator.userAgent
+    const browser = ua.includes('Chrome') ? 'Chrome' : ua.includes('Firefox') ? 'Firefox' : ua.includes('Safari') ? 'Safari' : 'Browser'
+    const os = ua.includes('Win') ? 'Windows' : ua.includes('Mac') ? 'macOS' : ua.includes('Linux') ? 'Linux' : ua.includes('Android') ? 'Android' : 'iOS'
+    return { browser, os, time: new Date().toLocaleDateString('de-AT', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) }
+  })
 
   async function handlePwReset() {
     setPwLoading(true)
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || window.location.origin
     await supabase.auth.resetPasswordForEmail(profile.email, { redirectTo: `${appUrl}/auth/reset-password` })
     setPwLoading(false); setPwSent(true)
+    showToast('Reset-E-Mail gesendet ✓')
   }
 
   async function handleDeleteAccount() {
@@ -1658,108 +1720,213 @@ function SettingsSection({ profile, isPro, onUpgrade }: { profile: UserProfile; 
     } finally { setDeleting(false) }
   }
 
+  // ── Shared sub-components ──
   const Toggle = ({ label, desc, val, onChange }: { label: string; desc?: string; val: boolean; onChange: (v: boolean) => void }) => (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderBottom: `0.5px solid ${C.border}` }}>
-      <div>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 0', borderBottom: `0.5px solid ${C.border}` }}>
+      <div style={{ flex: 1, paddingRight: 16 }}>
         <div style={{ fontSize: 13, color: C.white, fontWeight: 500 }}>{label}</div>
         {desc && <div style={{ fontSize: 11, color: C.mid, marginTop: 2 }}>{desc}</div>}
       </div>
-      <button onClick={() => onChange(!val)} style={{ width: 44, height: 24, borderRadius: 12, background: val ? C.navy : 'rgba(255,255,255,0.1)', border: 'none', cursor: 'pointer', position: 'relative', transition: 'background .2s', flexShrink: 0 }}>
+      <button onClick={() => onChange(!val)} aria-pressed={val}
+        style={{ width: 44, height: 24, borderRadius: 12, background: val ? C.navy2 : 'rgba(255,255,255,0.1)', border: 'none', cursor: 'pointer', position: 'relative', transition: 'background .2s', flexShrink: 0 }}>
         <div style={{ width: 18, height: 18, borderRadius: '50%', background: C.white, position: 'absolute', top: 3, left: val ? 23 : 3, transition: 'left .2s' }} />
       </button>
     </div>
   )
 
-  const Block = ({ title, children }: { title: string; children: React.ReactNode }) => (
-    <div style={{ marginBottom: 20, padding: '20px 24px', borderRadius: 14, border: `0.5px solid ${C.border}`, background: 'rgba(255,255,255,0.01)' }}>
-      <div style={{ fontSize: 14, fontWeight: 700, color: C.white, marginBottom: 16 }}>{title}</div>
+  const Block = ({ title, badge, children }: { title: string; badge?: string; children: React.ReactNode }) => (
+    <div style={{ marginBottom: 16, padding: '20px 22px', borderRadius: 14, border: `0.5px solid ${C.border}`, background: 'rgba(255,255,255,0.01)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: C.white }}>{title}</div>
+        {badge && <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 20, background: 'rgba(27,46,107,0.3)', color: C.navy3, fontWeight: 600 }}>{badge}</span>}
+      </div>
       {children}
     </div>
   )
 
-  return (
-    <div style={{ maxWidth: 560 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-        <h2 style={{ fontSize: 22, fontWeight: 700, color: C.white }}>Einstellungen</h2>
-        {saved && <span style={{ fontSize: 12, color: C.success, padding: '4px 12px', background: 'rgba(13,43,26,0.8)', border: '0.5px solid #2A6B47', borderRadius: 8 }}>✓ Gespeichert</span>}
-      </div>
+  const btnBase: React.CSSProperties = { padding: '9px 16px', minHeight: 38, borderRadius: 9, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 500, border: 'none' }
 
+  return (
+    <div style={{ maxWidth: 580 }}>
+      {toast && <div className="profile-save-toast">{toast}</div>}
+
+      <h2 style={{ fontSize: 22, fontWeight: 700, color: C.white, marginBottom: 24 }}>Einstellungen</h2>
+
+      {/* ── Erscheinungsbild ── */}
       <Block title="Erscheinungsbild">
-        <p style={{ fontSize: 12, color: C.mid, marginBottom: 12 }}>Wähle dein bevorzugtes Design. Die Änderung wird sofort übernommen.</p>
+        <p style={{ fontSize: 12, color: C.mid, marginBottom: 14 }}>Ändert sich sofort. Wird auf diesem Gerät gespeichert.</p>
         <div style={{ display: 'flex', gap: 8 }}>
           {[['dark', '🌙 Dark'], ['light', '☀️ Light'], ['system', '💻 System']].map(([v, l]) => (
-            <button key={v} onClick={() => applyTheme(v)} style={{ flex: 1, padding: '9px', borderRadius: 9, border: `0.5px solid ${theme === v ? C.navy2 : 'rgba(255,255,255,0.1)'}`, background: theme === v ? 'rgba(27,46,107,0.3)' : 'transparent', color: theme === v ? C.navy3 : C.mid, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 500 }}>{l}</button>
+            <button key={v} onClick={() => applyTheme(v)}
+              style={{ flex: 1, ...btnBase, border: `0.5px solid ${theme === v ? C.navy2 : 'rgba(255,255,255,0.1)'}`, background: theme === v ? 'rgba(27,46,107,0.3)' : 'transparent', color: theme === v ? C.navy3 : C.mid }}>{l}</button>
           ))}
         </div>
       </Block>
 
+      {/* ── Sprache ── */}
       <Block title="Sprache">
-        <p style={{ fontSize: 12, color: C.mid, marginBottom: 12 }}>Automatisch erkannt · Manuelle Auswahl überschreibt.</p>
-        <select value={language} onChange={e => applyLanguage(e.target.value)} style={{ padding: '9px 14px', borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: '#0D1117', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none', cursor: 'pointer', width: '100%' }}>
+        <p style={{ fontSize: 12, color: C.mid, marginBottom: 12 }}>Automatisch erkannt aus Browsersprache. Manuelle Auswahl lädt die Seite neu.</p>
+        <select value={language} onChange={e => applyLanguage(e.target.value)}
+          style={{ padding: '10px 14px', minHeight: 42, borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: '#0D1117', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none', cursor: 'pointer', width: '100%' }}>
           {[['de', '🇩🇪 Deutsch'], ['en', '🇬🇧 English'], ['tr', '🇹🇷 Türkçe'], ['es', '🇪🇸 Español'], ['fr', '🇫🇷 Français'], ['pl', '🇵🇱 Polski']].map(([v, l]) => (
             <option key={v} value={v}>{l}</option>
           ))}
         </select>
       </Block>
 
+      {/* ── Benachrichtigungen ── */}
       <Block title="Benachrichtigungen">
-        <Toggle label="E-Mail Alerts" desc="Job-Matches und Updates per E-Mail" val={emailAlerts} onChange={setEmailAlerts} />
-        <div style={{ paddingTop: 12 }}>
-          <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 8, fontWeight: 500 }}>Mindest-Match für Benachrichtigung</label>
+        <Toggle label="E-Mail Alerts" desc="Job-Matches und Updates per E-Mail erhalten" val={emailAlerts} onChange={toggleEmailAlerts} />
+        <div style={{ paddingTop: 14 }}>
+          <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 10, fontWeight: 500 }}>Mindest-Match-Score für Benachrichtigung</label>
           <div style={{ display: 'flex', gap: 8 }}>
-            {[['50', '50%+'], ['70', '70%+'], ['90', '90%+']].map(([v, l]) => (
-              <button key={v} onClick={() => setMatchThreshold(v)} style={{ flex: 1, padding: '7px', borderRadius: 8, border: `0.5px solid ${matchThreshold === v ? C.navy2 : 'rgba(255,255,255,0.1)'}`, background: matchThreshold === v ? 'rgba(27,46,107,0.3)' : 'transparent', color: matchThreshold === v ? C.navy3 : C.mid, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12 }}>{l}</button>
+            {[['50', '50 %+', 'Alle passenden Jobs'], ['70', '70 %+', 'Empfohlen'], ['90', '90 %+', 'Nur Top-Matches']].map(([v, label, sub]) => (
+              <button key={v} onClick={() => changeThreshold(v)}
+                style={{ flex: 1, padding: '10px 6px', borderRadius: 9, border: `0.5px solid ${matchThreshold === v ? C.navy2 : 'rgba(255,255,255,0.1)'}`, background: matchThreshold === v ? 'rgba(27,46,107,0.3)' : 'transparent', color: matchThreshold === v ? C.navy3 : C.mid, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'center' }}>
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 2 }}>{label}</div>
+                <div style={{ fontSize: 10 }}>{sub}</div>
+              </button>
             ))}
           </div>
         </div>
       </Block>
 
+      {/* ── Datenschutz ── */}
       <Block title="Datenschutz">
-        <Toggle label="Profil für Recruiter sichtbar" desc="Recruiter können dich aktiv kontaktieren" val={showToRecruiters} onChange={setShowToRecruiters} />
-        <div style={{ paddingTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button onClick={() => window.open('/api/user/export', '_blank')} style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', color: C.mid, border: `0.5px solid ${C.border}`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12 }}>📥 Daten exportieren (DSGVO)</button>
-          <button onClick={() => setShowDeleteConfirm(true)} style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(248,113,113,0.08)', color: '#f87171', border: '0.5px solid rgba(248,113,113,0.2)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12 }}>🗑 Alle Daten löschen</button>
+        <Toggle label="Profil für Recruiter sichtbar" desc="Recruiter können dich aktiv kontaktieren" val={showToRecruiters} onChange={toggleRecruiters} />
+        <div style={{ paddingTop: 16, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button
+            onClick={() => {
+              const a = document.createElement('a')
+              a.href = '/api/user/export'
+              a.download = `jobbly-daten-${new Date().toISOString().split('T')[0]}.json`
+              document.body.appendChild(a); a.click(); document.body.removeChild(a)
+            }}
+            style={{ ...btnBase, background: 'rgba(255,255,255,0.04)', color: C.mid, border: `0.5px solid ${C.border}` }}>
+            📥 Daten exportieren (DSGVO)
+          </button>
+          <button onClick={() => setShowDeleteConfirm(true)}
+            style={{ ...btnBase, background: 'rgba(248,113,113,0.08)', color: '#f87171', border: '0.5px solid rgba(248,113,113,0.2)' }}>
+            🗑 Alle Daten löschen
+          </button>
         </div>
         {showDeleteConfirm && (
-          <div style={{ marginTop: 14, padding: '16px', borderRadius: 10, background: 'rgba(248,113,113,0.08)', border: '0.5px solid rgba(248,113,113,0.3)' }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#f87171', marginBottom: 8 }}>⚠ Bist du sicher?</div>
-            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)', marginBottom: 14, lineHeight: 1.5 }}>Diese Aktion löscht deinen Account und alle Daten unwiderruflich. Sie kann nicht rückgängig gemacht werden.</p>
+          <div style={{ marginTop: 16, padding: '18px 18px', borderRadius: 12, background: 'rgba(248,113,113,0.07)', border: '0.5px solid rgba(248,113,113,0.3)' }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#f87171', marginBottom: 8 }}>⚠ Bist du sicher?</div>
+            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)', marginBottom: 16, lineHeight: 1.6 }}>Diese Aktion löscht deinen Account und <strong>alle</strong> Daten unwiderruflich. Sie kann nicht rückgängig gemacht werden.</p>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={handleDeleteAccount} disabled={deleting} style={{ padding: '8px 16px', borderRadius: 8, background: '#ef4444', color: '#fff', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 700 }}>{deleting ? 'Wird gelöscht…' : 'Ja, Account löschen'}</button>
-              <button onClick={() => setShowDeleteConfirm(false)} style={{ padding: '8px 14px', borderRadius: 8, background: 'transparent', color: C.mid, border: `0.5px solid ${C.border}`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12 }}>Abbrechen</button>
+              <button onClick={handleDeleteAccount} disabled={deleting}
+                style={{ ...btnBase, background: '#ef4444', color: '#fff', fontWeight: 700, fontSize: 13 }}>
+                {deleting ? 'Wird gelöscht…' : 'Ja, Account löschen'}
+              </button>
+              <button onClick={() => setShowDeleteConfirm(false)}
+                style={{ ...btnBase, background: 'transparent', color: C.mid, border: `0.5px solid ${C.border}` }}>
+                Abbrechen
+              </button>
             </div>
           </div>
         )}
       </Block>
 
+      {/* ── Abonnement ── */}
       <Block title="Abonnement">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: C.white }}>{isPro ? '⭐ Jobbly Premium' : 'Free Plan'}</div>
-            <div style={{ fontSize: 11, color: C.mid, marginTop: 3 }}>{isPro ? 'Aktiv · €9.99/Monat · Jederzeit kündbar' : 'Kostenlos — bis zu 3 Anschreiben inklusive'}</div>
+        <div style={{ padding: '16px', borderRadius: 12, background: isPro ? 'rgba(27,46,107,0.12)' : 'rgba(255,255,255,0.02)', border: `0.5px solid ${isPro ? 'rgba(27,46,107,0.4)' : C.border}`, marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <span style={{ fontSize: 18 }}>{isPro ? '⭐' : '🆓'}</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: C.white }}>{isPro ? 'Jobbly Pro' : 'Free Plan'}</span>
+                <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 20, background: isPro ? 'rgba(74,222,128,0.12)' : 'rgba(255,255,255,0.06)', color: isPro ? C.success : C.mid, fontWeight: 600 }}>{isPro ? 'AKTIV' : 'KOSTENLOS'}</span>
+              </div>
+              {isPro ? (
+                <>
+                  <div style={{ fontSize: 12, color: C.mid, marginBottom: 3 }}>€9.99 / Monat · Jederzeit kündbar</div>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>Abrechnung & Details: Stripe Customer Portal</div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: 12, color: C.mid, marginBottom: 3 }}>3 kostenlose Anschreiben inklusive</div>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>Kein Abo, keine Kreditkarte nötig</div>
+                </>
+              )}
+            </div>
+            {isPro ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
+                <button onClick={openPortal} disabled={portalLoading}
+                  style={{ ...btnBase, background: 'rgba(255,255,255,0.06)', color: C.mid, border: `0.5px solid ${C.border}`, whiteSpace: 'nowrap' }}>
+                  {portalLoading ? '…' : '📋 Abrechnung verwalten'}
+                </button>
+                <button onClick={openPortal} disabled={portalLoading}
+                  style={{ ...btnBase, background: 'rgba(248,113,113,0.08)', color: '#f87171', border: '0.5px solid rgba(248,113,113,0.2)' }}>
+                  {portalLoading ? '…' : 'Kündigen'}
+                </button>
+              </div>
+            ) : (
+              <button onClick={onUpgrade}
+                style={{ ...btnBase, background: `linear-gradient(135deg, ${C.purple}, ${C.purple2})`, color: C.white, fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                ⚡ Jetzt upgraden
+              </button>
+            )}
           </div>
-          {isPro ? (
-            <button onClick={openPortal} disabled={portalLoading} style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(248,113,113,0.08)', color: '#f87171', border: '0.5px solid rgba(248,113,113,0.2)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12 }}>{portalLoading ? '…' : 'Kündigen'}</button>
-          ) : (
-            <button onClick={onUpgrade} style={{ padding: '8px 14px', borderRadius: 8, background: `linear-gradient(135deg, ${C.purple}, ${C.purple2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600 }}>Jetzt upgraden</button>
-          )}
         </div>
+        {!isPro && (
+          <div style={{ fontSize: 12, color: C.mid, lineHeight: 1.6 }}>
+            Mit <strong style={{ color: C.navy3 }}>Jobbly Pro</strong> erhältst du: unbegrenzte KI-Anschreiben, Premium-Lebenslauf-Designs, Priority-Support.
+            <button onClick={openCheckout} disabled={checkoutLoading}
+              style={{ display: 'block', marginTop: 10, ...btnBase, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, width: '100%', textAlign: 'center' }}>
+              {checkoutLoading ? '…' : '🚀 Pro für €9.99/Monat starten'}
+            </button>
+          </div>
+        )}
       </Block>
 
+      {/* ── Sicherheit ── */}
       <Block title="Sicherheit">
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        {/* Password reset */}
+        <div style={{ paddingBottom: 16, borderBottom: `0.5px solid ${C.border}`, marginBottom: 16 }}>
+          <div style={{ fontSize: 13, color: C.white, fontWeight: 500, marginBottom: 4 }}>Passwort</div>
+          <div style={{ fontSize: 11, color: C.mid, marginBottom: 10 }}>Sende dir einen sicheren Reset-Link per E-Mail.</div>
           {pwSent ? (
-            <div style={{ fontSize: 12, color: C.success, padding: '8px 14px', background: 'rgba(13,43,26,0.8)', border: '0.5px solid #2A6B47', borderRadius: 8, display: 'inline-block' }}>✓ E-Mail wurde gesendet</div>
+            <div style={{ fontSize: 12, color: C.success, padding: '8px 14px', background: 'rgba(13,43,26,0.8)', border: '0.5px solid #2A6B47', borderRadius: 8, display: 'inline-flex', alignItems: 'center', gap: 6 }}>✓ E-Mail wurde gesendet an {profile.email}</div>
           ) : (
-            <button onClick={handlePwReset} disabled={pwLoading} style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', color: C.mid, border: `0.5px solid ${C.border}`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12 }}>{pwLoading ? 'Wird gesendet…' : '🔑 Passwort ändern'}</button>
+            <button onClick={handlePwReset} disabled={pwLoading}
+              style={{ ...btnBase, background: 'rgba(255,255,255,0.05)', color: C.mid, border: `0.5px solid ${C.border}` }}>
+              {pwLoading ? 'Wird gesendet…' : '🔑 Passwort ändern'}
+            </button>
           )}
-          <button disabled style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', color: C.mid, border: `0.5px solid ${C.border}`, cursor: 'not-allowed', fontFamily: 'inherit', fontSize: 12, opacity: 0.5 }}>🔐 2FA — Demnächst</button>
+        </div>
+
+        {/* Active sessions */}
+        <div style={{ paddingBottom: 16, borderBottom: `0.5px solid ${C.border}`, marginBottom: 16 }}>
+          <div style={{ fontSize: 13, color: C.white, fontWeight: 500, marginBottom: 10 }}>Aktive Sitzungen</div>
+          <div style={{ padding: '12px 14px', borderRadius: 10, background: 'rgba(255,255,255,0.02)', border: `0.5px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.success, display: 'inline-block' }} />
+                <span style={{ fontSize: 12, color: C.white, fontWeight: 500 }}>
+                  {(sessionInfo as { browser?: string; os?: string; time?: string }).browser || 'Browser'} · {(sessionInfo as { browser?: string; os?: string; time?: string }).os || 'Unbekannt'}
+                </span>
+              </div>
+              <div style={{ fontSize: 11, color: C.mid }}>Aktuelle Sitzung · {(sessionInfo as { browser?: string; os?: string; time?: string }).time || '—'}</div>
+            </div>
+            <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 20, background: 'rgba(74,222,128,0.1)', color: C.success, fontWeight: 600 }}>Aktiv</span>
+          </div>
+          <button
+            onClick={async () => { await supabase.auth.signOut({ scope: 'others' }); showToast('Alle anderen Sitzungen abgemeldet ✓') }}
+            style={{ ...btnBase, marginTop: 10, background: 'transparent', color: C.mid, border: `0.5px solid ${C.border}`, fontSize: 11 }}>
+            Alle anderen Sitzungen abmelden
+          </button>
+        </div>
+
+        {/* 2FA */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontSize: 13, color: C.mid, fontWeight: 500 }}>🔐 Zwei-Faktor-Authentifizierung</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 2 }}>Erhöhe die Sicherheit deines Kontos</div>
+          </div>
+          <span style={{ fontSize: 10, padding: '4px 10px', borderRadius: 20, background: 'rgba(245,158,11,0.1)', color: C.amber, fontWeight: 600, border: '0.5px solid rgba(245,158,11,0.2)' }}>Demnächst</span>
         </div>
       </Block>
-
-      <button onClick={handleSave} disabled={saving} style={{ width: '100%', padding: 13, borderRadius: 10, background: saving ? 'rgba(255,255,255,0.06)' : `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: saving ? C.mid : C.white, border: 'none', cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 700 }}>
-        {saving ? 'Wird gespeichert…' : 'Einstellungen speichern'}
-      </button>
     </div>
   )
 }
