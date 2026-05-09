@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -106,11 +106,17 @@ function Sidebar({ active, onNav, profile, isPro, onUpgrade, onLogout }: {
   profile: UserProfile; isPro: boolean; onUpgrade: () => void; onLogout: () => void
 }) {
   const [showPopup, setShowPopup] = useState(false)
+  const router = useRouter()
   const initials = ((profile.first_name || '?').charAt(0) + (profile.last_name || '').charAt(0)).toUpperCase()
 
   return (
     <aside style={{ width: 240, background: C.sidebar, borderRight: `0.5px solid ${C.border}`, display: 'flex', flexDirection: 'column', flexShrink: 0, height: '100vh', position: 'sticky', top: 0 }}>
-      <div style={{ padding: '20px 20px 16px', borderBottom: `0.5px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div
+        onClick={() => router.push('/dashboard')}
+        style={{ padding: '20px 20px 16px', borderBottom: `0.5px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
+        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.03)' }}
+        onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+      >
         <JMark size={32} />
         <span style={{ fontSize: 18, fontWeight: 700, color: C.white, letterSpacing: '-.3px' }}>
           Jobbly<span style={{ color: C.navy3, fontWeight: 400 }}>.ai</span>
@@ -188,10 +194,32 @@ function Sidebar({ active, onNav, profile, isPro, onUpgrade, onLogout }: {
 }
 
 // ── TopBar ────────────────────────────────────────────────────────────────────
+const MOCK_NOTIFS = [
+  { id: '1', icon: '💼', title: 'Neuer Job Match', desc: 'Product Manager bei TechVision — 92% Match', time: 'Vor 2 Std.', read: false },
+  { id: '2', icon: '👀', title: 'Bewerbung angesehen', desc: 'Digital Solutions AG hat deine Bewerbung geöffnet', time: 'Vor 5 Std.', read: false },
+  { id: '3', icon: '⭐', title: 'Einladung erhalten', desc: 'InnovateX lädt dich zu einem Interview ein', time: 'Vor 1 Tag', read: false },
+  { id: '4', icon: '🔔', title: 'Jobbly Update', desc: 'Neue KI-Features: Lebenslauf-Builder & mehr', time: 'Vor 3 Tagen', read: true },
+]
+
 function TopBar({ profile, isPro, onUpgrade, onNav }: { profile: UserProfile; isPro: boolean; onUpgrade: () => void; onNav: (id: NavId) => void }) {
   const [search, setSearch] = useState('')
   const [showPopup, setShowPopup] = useState(false)
+  const [showBell, setShowBell] = useState(false)
+  const [notifs, setNotifs] = useState(MOCK_NOTIFS)
+  const bellRef = useRef<HTMLDivElement>(null)
   const initials = (profile.first_name || '?').charAt(0).toUpperCase()
+  const unread = notifs.filter(n => !n.read).length
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (bellRef.current && !bellRef.current.contains(e.target as Node)) setShowBell(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  function markAllRead() { setNotifs(n => n.map(x => ({ ...x, read: true }))) }
+  function markRead(id: string) { setNotifs(n => n.map(x => x.id === id ? { ...x, read: true } : x)) }
 
   return (
     <header style={{ height: 60, borderBottom: `0.5px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 16, padding: '0 28px', background: C.bg, flexShrink: 0 }}>
@@ -210,7 +238,45 @@ function TopBar({ profile, isPro, onUpgrade, onNav }: { profile: UserProfile; is
         ) : (
           <button onClick={onUpgrade} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 20, background: 'rgba(124,58,237,0.2)', color: '#a78bfa', border: `0.5px solid rgba(124,58,237,0.4)`, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>⭐ Premium</button>
         )}
-        <button style={{ background: 'none', border: `0.5px solid ${C.border}`, borderRadius: 8, width: 36, height: 36, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: C.mid }}>🔔</button>
+
+        {/* Notification bell */}
+        <div ref={bellRef} style={{ position: 'relative' }}>
+          <button onClick={() => setShowBell(b => !b)} style={{ background: 'none', border: `0.5px solid ${C.border}`, borderRadius: 8, width: 36, height: 36, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: showBell ? C.white : C.mid, position: 'relative', transition: 'all .15s' }}>
+            🔔
+            {unread > 0 && (
+              <span style={{ position: 'absolute', top: -4, right: -4, width: 16, height: 16, borderRadius: '50%', background: '#ef4444', color: '#fff', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `2px solid ${C.bg}` }}>{unread}</span>
+            )}
+          </button>
+          {showBell && (
+            <div style={{ position: 'absolute', top: 44, right: 0, width: 340, background: '#0D1117', border: `0.5px solid rgba(255,255,255,0.12)`, borderRadius: 14, boxShadow: '0 12px 40px rgba(0,0,0,0.6)', zIndex: 200, overflow: 'hidden' }}>
+              <div style={{ padding: '14px 16px', borderBottom: `0.5px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: C.white }}>Benachrichtigungen</span>
+                {unread > 0 && <button onClick={markAllRead} style={{ fontSize: 11, color: C.navy3, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>Alle als gelesen markieren</button>}
+              </div>
+              <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+                {notifs.map(n => (
+                  <div key={n.id} onClick={() => markRead(n.id)} style={{ display: 'flex', gap: 12, padding: '12px 16px', cursor: 'pointer', background: n.read ? 'transparent' : 'rgba(27,46,107,0.08)', borderBottom: `0.5px solid ${C.border}`, transition: 'background .15s' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
+                    onMouseLeave={e => { e.currentTarget.style.background = n.read ? 'transparent' : 'rgba(27,46,107,0.08)' }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 9, background: 'rgba(27,46,107,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>{n.icon}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: C.white }}>{n.title}</span>
+                        {!n.read && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6', flexShrink: 0, display: 'inline-block' }} />}
+                      </div>
+                      <div style={{ fontSize: 11, color: C.mid, lineHeight: 1.4 }}>{n.desc}</div>
+                      <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 4 }}>{n.time}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ padding: '10px 16px', borderTop: `0.5px solid ${C.border}`, textAlign: 'center' }}>
+                <button onClick={() => setShowBell(false)} style={{ fontSize: 12, color: C.navy3, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500 }}>Alle Benachrichtigungen →</button>
+              </div>
+            </div>
+          )}
+        </div>
+
         <div
           style={{ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: C.white, cursor: 'pointer', border: '2px solid rgba(99,102,241,0.5)', position: 'relative' }}
           onMouseEnter={() => setShowPopup(true)}
@@ -226,9 +292,11 @@ function TopBar({ profile, isPro, onUpgrade, onNav }: { profile: UserProfile; is
 }
 
 // ── Stat card ─────────────────────────────────────────────────────────────────
-function StatCard({ icon, value, label, sub, subColor }: { icon: string; value: string; label: string; sub?: string; subColor?: string }) {
+function StatCard({ icon, value, label, sub, subColor, onClick }: { icon: string; value: string; label: string; sub?: string; subColor?: string; onClick?: () => void }) {
   return (
-    <div style={{ flex: 1, minWidth: 0, padding: '18px 20px', borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: `0.5px solid ${C.border}` }}>
+    <div onClick={onClick} style={{ flex: 1, minWidth: 0, padding: '18px 20px', borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: `0.5px solid ${C.border}`, cursor: onClick ? 'pointer' : 'default', transition: 'all .15s' }}
+      onMouseEnter={e => { if (onClick) { e.currentTarget.style.borderColor = 'rgba(27,46,107,0.5)'; e.currentTarget.style.background = 'rgba(27,46,107,0.08)' } }}
+      onMouseLeave={e => { if (onClick) { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.background = 'rgba(255,255,255,0.03)' } }}>
       <div style={{ fontSize: 22, marginBottom: 10 }}>{icon}</div>
       <div style={{ fontSize: 26, fontWeight: 700, color: C.white, letterSpacing: '-.5px', lineHeight: 1 }}>{value}</div>
       <div style={{ fontSize: 12, color: C.mid, marginTop: 5 }}>{label}</div>
@@ -408,8 +476,10 @@ function JobDetailModal({ job, profile, onClose }: { job: ReturnType<typeof make
 }
 
 // ── Right Sidebar ─────────────────────────────────────────────────────────────
-function RightSidebar({ applications }: { applications: Application[] }) {
+function RightSidebar({ applications, onNav }: { applications: Application[]; onNav: (id: NavId) => void }) {
   const [salary, setSalary] = useState(60000)
+  const [editingSalary, setEditingSalary] = useState(false)
+  const [salarySaved, setSalarySaved] = useState(false)
   const activity = useMemo(() => {
     if (applications.length === 0) return [
       { icon: '🎯', text: 'Profil anlegen', sub: 'Starte deinen ersten Lebenslauf', time: 'Jetzt' },
@@ -427,19 +497,29 @@ function RightSidebar({ applications }: { applications: Application[] }) {
       <section style={{ marginBottom: 28 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: C.white }}>Wunschgehalt</div>
-          <span style={{ fontSize: 12, color: C.navy3, cursor: 'pointer', fontWeight: 500 }}>Bearbeiten</span>
+          {salarySaved ? <span style={{ fontSize: 11, color: C.success }}>✓ Gespeichert</span> : (
+            <span onClick={() => setEditingSalary(e => !e)} style={{ fontSize: 12, color: C.navy3, cursor: 'pointer', fontWeight: 500 }}>{editingSalary ? 'Schließen' : 'Bearbeiten'}</span>
+          )}
         </div>
         <div style={{ fontSize: 11, color: C.mid, marginBottom: 10 }}>Deine Gehaltsvorstellung</div>
         <div style={{ fontSize: 22, fontWeight: 700, color: C.white, letterSpacing: '-.5px', marginBottom: 3 }}>
           {(salary - 5000).toLocaleString('de')} € – {(salary + 5000).toLocaleString('de')} €
         </div>
         <div style={{ fontSize: 12, color: C.mid, marginBottom: 12 }}>Zielgehalt: {salary.toLocaleString('de')} €</div>
-        <input type="range" min={45000} max={75000} step={1000} value={salary} onChange={e => setSalary(Number(e.target.value))}
-          style={{ width: '100%', accentColor: C.purple, cursor: 'pointer', height: 4 }} />
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
-          <span style={{ fontSize: 11, color: C.mid }}>45K €</span>
-          <span style={{ fontSize: 11, color: C.mid }}>75K €</span>
-        </div>
+        {editingSalary && (
+          <>
+            <input type="range" min={45000} max={75000} step={1000} value={salary} onChange={e => setSalary(Number(e.target.value))}
+              style={{ width: '100%', accentColor: C.purple, cursor: 'pointer', height: 4 }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, marginBottom: 10 }}>
+              <span style={{ fontSize: 11, color: C.mid }}>45K €</span>
+              <span style={{ fontSize: 11, color: C.mid }}>75K €</span>
+            </div>
+            <button onClick={() => { setEditingSalary(false); setSalarySaved(true); setTimeout(() => setSalarySaved(false), 2000) }}
+              style={{ width: '100%', padding: '7px', borderRadius: 8, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, marginBottom: 8 }}>
+              Speichern
+            </button>
+          </>
+        )}
         <div style={{ marginTop: 16, padding: 14, borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: `0.5px solid ${C.border}` }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: C.white, marginBottom: 3 }}>Marktvergleich</div>
           <div style={{ fontSize: 11, color: C.mid, marginBottom: 10, lineHeight: 1.5 }}>Deine Gehaltsvorstellung liegt im Durchschnitt für deine Position.</div>
@@ -452,10 +532,11 @@ function RightSidebar({ applications }: { applications: Application[] }) {
       <section style={{ marginBottom: 28 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: C.white }}>Karriere Kurse</div>
-          <span style={{ fontSize: 12, color: C.navy3, cursor: 'pointer', fontWeight: 500 }}>Alle anzeigen</span>
+          <span onClick={() => onNav('courses')} style={{ fontSize: 12, color: C.navy3, cursor: 'pointer', fontWeight: 500 }}>Alle anzeigen</span>
         </div>
         {COURSES.slice(0, 3).map(course => (
-          <div key={course.name} style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 14 }}>
+          <div key={course.name} onClick={() => window.open(course.url === '#' ? `https://www.${course.platform.toLowerCase()}.com` : course.url, '_blank')}
+            style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 14, cursor: 'pointer' }}>
             <div style={{ width: 36, height: 36, borderRadius: 8, background: course.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff', flexShrink: 0 }}>{course.initial}</div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: C.white, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{course.name}</div>
@@ -620,88 +701,478 @@ function ApplicationsSection({ applications, profile }: { applications: Applicat
   )
 }
 
-// ── Section: CV ───────────────────────────────────────────────────────────────
-function CVSection() {
-  const designs = [
-    { id: 'nordic', name: 'Nordic Minimal', emoji: '🇸🇪', desc: 'Clean, Serif, Professional' },
-    { id: 'mono', name: 'Mono Elegant', emoji: '⬛', desc: 'Bold Header, High Contrast' },
-    { id: 'split', name: 'Split Premium', emoji: '🎨', desc: 'Navy Sidebar, Modern' },
-  ]
+// ── CV helpers ────────────────────────────────────────────────────────────────
+interface CVVersion {
+  id: string; name: string; design: 'nordic' | 'mono' | 'split'
+  data: { name: string; email: string; phone: string; city: string; position: string; experience: string; education: string; skills: string; languages: string; summary: string }
+  createdAt: string; updatedAt: string
+}
+const CV_DESIGNS = [
+  { id: 'nordic' as const, name: 'Nordic Minimal', desc: 'Sauber, Serif, Professionell', accent: '#1B2E6B', sidebar: '' },
+  { id: 'mono' as const, name: 'Mono Elegant', desc: 'Bold Header, Hoher Kontrast', accent: '#111111', sidebar: '' },
+  { id: 'split' as const, name: 'Split Premium', desc: 'Marine Sidebar, Modern', accent: '#253A85', sidebar: '#1B2E6B' },
+]
+
+async function exportCvPDF(data: CVVersion['data'], name: string) {
+  const { default: jsPDF } = await import('jspdf')
+  const doc = new jsPDF()
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(20); doc.text(data.name || 'Name', 15, 22)
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(11); doc.setTextColor(100)
+  doc.text(data.position || '', 15, 30)
+  doc.text([data.city, data.email, data.phone].filter(Boolean).join('  ·  '), 15, 37)
+  doc.setTextColor(0); doc.line(15, 41, 195, 41)
+  let y = 50
+  const addSection = (title: string, content: string) => {
+    if (!content) return
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.text(title, 15, y); y += 6
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10)
+    const lines = doc.splitTextToSize(content, 180); doc.text(lines, 15, y); y += lines.length * 5 + 6
+  }
+  addSection('Profil', data.summary); addSection('Berufserfahrung', data.experience)
+  addSection('Ausbildung', data.education); addSection('Skills', data.skills); addSection('Sprachen', data.languages)
+  doc.save(`${name}.pdf`)
+}
+
+async function exportCvWord(data: CVVersion['data'], name: string) {
+  const { Document, Packer, Paragraph, TextRun, HeadingLevel } = await import('docx')
+  const section = (title: string, content: string) => content ? [
+    new Paragraph({ text: title, heading: HeadingLevel.HEADING_2 }),
+    new Paragraph({ text: content }), new Paragraph({ text: '' }),
+  ] : []
+  const doc = new Document({ sections: [{ properties: {}, children: [
+    new Paragraph({ text: data.name, heading: HeadingLevel.HEADING_1 }),
+    new Paragraph({ children: [new TextRun({ text: data.position, bold: true })] }),
+    new Paragraph({ text: [data.city, data.email, data.phone].filter(Boolean).join(' · ') }),
+    new Paragraph({ text: '' }),
+    ...section('Profil', data.summary), ...section('Berufserfahrung', data.experience),
+    ...section('Ausbildung', data.education), ...section('Skills', data.skills),
+    ...section('Sprachen', data.languages),
+  ]}]})
+  const blob = await Packer.toBlob(doc)
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a'); a.href = url; a.download = `${name}.docx`
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
+}
+
+function MiniCVPreview({ data, design }: { data: CVVersion['data']; design: string }) {
+  const d = CV_DESIGNS.find(x => x.id === design) || CV_DESIGNS[0]
+  const isSplit = design === 'split'
+  const isMono = design === 'mono'
+
+  if (isSplit) return (
+    <div style={{ width: '100%', height: '100%', display: 'flex', background: '#fff', borderRadius: 4, overflow: 'hidden', fontSize: 5 }}>
+      <div style={{ width: '35%', background: d.accent, color: '#fff', padding: '10px 6px' }}>
+        <div style={{ width: 18, height: 18, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', margin: '0 auto 6px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, fontWeight: 700 }}>{(data.name || 'N').charAt(0)}</div>
+        <div style={{ fontWeight: 700, fontSize: 5.5, textAlign: 'center', marginBottom: 2 }}>{data.name || 'Dein Name'}</div>
+        <div style={{ fontSize: 4.5, textAlign: 'center', opacity: 0.8, marginBottom: 6 }}>{data.position || 'Position'}</div>
+        <div style={{ fontSize: 4, opacity: 0.7, marginBottom: 2 }}>📧 {data.email || 'email@mail.com'}</div>
+        <div style={{ fontSize: 4, opacity: 0.7, marginBottom: 2 }}>📍 {data.city || 'Stadt'}</div>
+        {data.skills && <><div style={{ fontWeight: 700, fontSize: 5, marginTop: 8, marginBottom: 3 }}>SKILLS</div>{data.skills.split(',').slice(0, 3).map((s, i) => <div key={i} style={{ fontSize: 4, background: 'rgba(255,255,255,0.15)', borderRadius: 2, padding: '1px 3px', marginBottom: 2 }}>{s.trim()}</div>)}</>}
+      </div>
+      <div style={{ flex: 1, padding: '10px 6px' }}>
+        {data.summary && <><div style={{ fontWeight: 700, fontSize: 5, color: d.accent, borderBottom: `0.5px solid ${d.accent}`, marginBottom: 4, paddingBottom: 1 }}>PROFIL</div><div style={{ fontSize: 4, color: '#444', lineHeight: 1.5, marginBottom: 8 }}>{data.summary.slice(0, 100)}</div></>}
+        {data.experience && <><div style={{ fontWeight: 700, fontSize: 5, color: d.accent, borderBottom: `0.5px solid ${d.accent}`, marginBottom: 4, paddingBottom: 1 }}>ERFAHRUNG</div><div style={{ fontSize: 4, color: '#444', lineHeight: 1.5 }}>{data.experience.slice(0, 80)}</div></>}
+      </div>
+    </div>
+  )
+
   return (
-    <div style={{ maxWidth: 700 }}>
-      <h2 style={{ fontSize: 22, fontWeight: 700, color: C.white, marginBottom: 8 }}>Lebenslauf</h2>
-      <p style={{ fontSize: 13, color: C.mid, marginBottom: 24 }}>Erstelle deinen professionellen Lebenslauf mit KI-Unterstützung.</p>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 24 }}>
-        {designs.map(d => (
-          <div key={d.id} style={{ padding: '20px 16px', borderRadius: 14, border: `0.5px solid ${C.border}`, background: 'rgba(255,255,255,0.02)', textAlign: 'center', cursor: 'pointer', transition: 'all .2s' }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(27,46,107,0.5)'; e.currentTarget.style.background = 'rgba(27,46,107,0.08)' }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}>
-            <div style={{ fontSize: 32, marginBottom: 10 }}>{d.emoji}</div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: C.white, marginBottom: 5 }}>{d.name}</div>
-            <div style={{ fontSize: 11, color: C.mid }}>{d.desc}</div>
+    <div style={{ width: '100%', height: '100%', background: '#fff', borderRadius: 4, padding: '10px 8px', overflow: 'hidden' }}>
+      {isMono ? (
+        <div style={{ background: '#111', padding: '8px', margin: '-10px -8px 8px', color: '#fff' }}>
+          <div style={{ fontWeight: 900, fontSize: 9, letterSpacing: 1 }}>{data.name || 'DEIN NAME'}</div>
+          <div style={{ fontSize: 5, opacity: 0.7, marginTop: 2 }}>{data.position || 'Position'} · {data.city || 'Stadt'}</div>
+        </div>
+      ) : (
+        <>
+          <div style={{ fontWeight: 700, fontSize: 8, color: '#111', marginBottom: 1 }}>{data.name || 'Dein Name'}</div>
+          <div style={{ fontSize: 5, color: d.accent, fontWeight: 600, marginBottom: 2 }}>{data.position || 'Deine Position'}</div>
+          <div style={{ fontSize: 4, color: '#666', marginBottom: 6 }}>{[data.city, data.email].filter(Boolean).join(' · ')}</div>
+          <div style={{ height: 0.5, background: d.accent, marginBottom: 6 }} />
+        </>
+      )}
+      {data.summary && <><div style={{ fontSize: 4.5, fontWeight: 700, color: isMono ? '#111' : d.accent, marginBottom: 2 }}>PROFIL</div><div style={{ fontSize: 3.8, color: '#555', lineHeight: 1.5, marginBottom: 6 }}>{data.summary.slice(0, 80)}</div></>}
+      {data.experience && <><div style={{ fontSize: 4.5, fontWeight: 700, color: isMono ? '#111' : d.accent, marginBottom: 2 }}>ERFAHRUNG</div><div style={{ fontSize: 3.8, color: '#555', lineHeight: 1.5, marginBottom: 6 }}>{data.experience.slice(0, 80)}</div></>}
+      {data.skills && <><div style={{ fontSize: 4.5, fontWeight: 700, color: isMono ? '#111' : d.accent, marginBottom: 3 }}>SKILLS</div><div style={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>{data.skills.split(',').slice(0, 4).map((s, i) => <span key={i} style={{ fontSize: 3.5, background: `${d.accent}22`, color: d.accent, padding: '1px 3px', borderRadius: 2 }}>{s.trim()}</span>)}</div></>}
+    </div>
+  )
+}
+
+// ── Section: CV ───────────────────────────────────────────────────────────────
+function CVSection({ profile, isPro }: { profile: UserProfile; isPro: boolean }) {
+  const p = profile as UserProfile & Record<string, unknown>
+  const storageKey = `jobbly_cvs_${profile.id}`
+  const [cvs, setCvs] = useState<CVVersion[]>(() => {
+    if (typeof window === 'undefined') return []
+    try { return JSON.parse(localStorage.getItem(storageKey) || '[]') } catch { return [] }
+  })
+  const [building, setBuilding] = useState(false)
+  const [selectedDesign, setSelectedDesign] = useState<CVVersion['design']>('nordic')
+  const [cvName, setCvName] = useState('Mein Lebenslauf')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameVal, setRenameVal] = useState('')
+
+  const [fd, setFd] = useState({
+    name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
+    email: profile.email || '',
+    phone: String(p.phone || ''),
+    city: String(p.city || ''),
+    position: String(p.position || ''),
+    experience: String(p.experience || ''),
+    education: '',
+    skills: '',
+    languages: '',
+    summary: '',
+  })
+
+  function upd<K extends keyof typeof fd>(k: K, v: string) { setFd(prev => ({ ...prev, [k]: v })) }
+
+  function saveCvs(updated: CVVersion[]) {
+    setCvs(updated); localStorage.setItem(storageKey, JSON.stringify(updated))
+  }
+
+  function startNew() {
+    setBuilding(true); setEditingId(null); setCvName('Mein Lebenslauf'); setSelectedDesign('nordic')
+    setFd({
+      name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
+      email: profile.email || '', phone: String(p.phone || ''), city: String(p.city || ''),
+      position: String(p.position || ''), experience: String(p.experience || ''),
+      education: '', skills: '', languages: '', summary: '',
+    })
+  }
+
+  function openEdit(cv: CVVersion) {
+    setBuilding(true); setEditingId(cv.id); setCvName(cv.name); setSelectedDesign(cv.design); setFd(cv.data)
+  }
+
+  function saveCv() {
+    const now = new Date().toISOString(); const id = editingId || `cv_${Date.now()}`
+    const existing = cvs.find(c => c.id === editingId)
+    const newCv: CVVersion = { id, name: cvName, design: selectedDesign, data: fd, createdAt: existing?.createdAt || now, updatedAt: now }
+    saveCvs(editingId ? cvs.map(c => c.id === editingId ? newCv : c) : [...cvs, newCv])
+    setSaved(true); setTimeout(() => setSaved(false), 2500); setBuilding(false); setEditingId(null)
+  }
+
+  function duplicateCv(cv: CVVersion) {
+    const now = new Date().toISOString()
+    saveCvs([...cvs, { ...cv, id: `cv_${Date.now()}`, name: `${cv.name} (Kopie)`, createdAt: now, updatedAt: now }])
+  }
+
+  const inp = (label: string, key: keyof typeof fd, placeholder = '', rows?: number) => (
+    <div style={{ marginBottom: 12 }}>
+      <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 5, fontWeight: 500 }}>{label}</label>
+      {rows ? (
+        <textarea value={fd[key]} onChange={e => upd(key, e.target.value)} placeholder={placeholder} rows={rows}
+          style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: `0.5px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.04)', color: C.white, fontFamily: 'inherit', fontSize: 12, resize: 'vertical', outline: 'none' }} />
+      ) : (
+        <input value={fd[key]} onChange={e => upd(key, e.target.value)} placeholder={placeholder}
+          style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: `0.5px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.04)', color: C.white, fontFamily: 'inherit', fontSize: 12, outline: 'none' }} />
+      )}
+    </div>
+  )
+
+  if (building) return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, height: '100%' }}>
+      {/* Left: form */}
+      <div style={{ overflowY: 'auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+          <button onClick={() => { setBuilding(false); setEditingId(null) }} style={{ background: 'rgba(255,255,255,0.06)', border: `0.5px solid ${C.border}`, borderRadius: 8, padding: '6px 12px', color: C.mid, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12 }}>← Zurück</button>
+          <input value={cvName} onChange={e => setCvName(e.target.value)} style={{ flex: 1, padding: '7px 12px', borderRadius: 8, border: `0.5px solid rgba(255,255,255,0.15)`, background: 'rgba(255,255,255,0.06)', color: C.white, fontFamily: 'inherit', fontSize: 14, fontWeight: 600, outline: 'none' }} />
+        </div>
+
+        {/* Design picker */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: C.mid, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '.05em' }}>Design wählen</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+            {CV_DESIGNS.map(d => (
+              <button key={d.id} onClick={() => setSelectedDesign(d.id)} style={{ padding: '10px 8px', borderRadius: 10, border: `1.5px solid ${selectedDesign === d.id ? C.navy2 : C.border}`, background: selectedDesign === d.id ? 'rgba(27,46,107,0.3)' : 'rgba(255,255,255,0.02)', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'center', transition: 'all .15s' }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: selectedDesign === d.id ? C.navy3 : C.white, marginBottom: 3 }}>{d.name}</div>
+                <div style={{ fontSize: 10, color: C.mid }}>{d.desc}</div>
+              </button>
+            ))}
           </div>
-        ))}
+        </div>
+
+        <div style={{ fontSize: 12, fontWeight: 600, color: C.mid, marginBottom: 12, textTransform: 'uppercase', letterSpacing: '.05em' }}>Deine Daten</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div>{inp('Vorname & Nachname', 'name', 'Max Mustermann')}</div>
+          <div>{inp('E-Mail', 'email', 'max@mail.com')}</div>
+          <div>{inp('Telefon', 'phone', '+43 ...')}</div>
+          <div>{inp('Stadt', 'city', 'Wien')}</div>
+          <div style={{ gridColumn: '1 / -1' }}>{inp('Wunschposition', 'position', 'z.B. Product Manager')}</div>
+        </div>
+        {inp('Profil / Zusammenfassung', 'summary', 'Kurze professionelle Zusammenfassung…', 3)}
+        {inp('Berufserfahrung', 'experience', 'z.B. 2020–2024: Senior PM bei TechCo…', 4)}
+        {inp('Ausbildung', 'education', 'z.B. MSc Wirtschaftsinformatik, WU Wien', 2)}
+        {inp('Skills (kommagetrennt)', 'skills', 'z.B. Product Management, Agile, Jira')}
+        {inp('Sprachen', 'languages', 'z.B. Deutsch (Muttersprache), Englisch (C1)')}
+
+        {/* Export/Save buttons */}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+          <button onClick={saveCv} style={{ flex: 1, padding: '11px', borderRadius: 9, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 700 }}>
+            {saved ? '✓ Gespeichert!' : '💾 Speichern'}
+          </button>
+          <button onClick={() => { setExporting(true); exportCvPDF(fd, cvName).finally(() => setExporting(false)) }} disabled={exporting} style={{ padding: '11px 14px', borderRadius: 9, background: 'rgba(255,255,255,0.05)', color: C.white, border: `0.5px solid ${C.border2}`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600 }}>
+            {exporting ? '…' : '📄 PDF'}
+          </button>
+          <button onClick={() => { setExporting(true); exportCvWord(fd, cvName).finally(() => setExporting(false)) }} disabled={exporting} style={{ padding: '11px 14px', borderRadius: 9, background: 'rgba(255,255,255,0.05)', color: C.white, border: `0.5px solid ${C.border2}`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600 }}>
+            {exporting ? '…' : '📝 Word'}
+          </button>
+        </div>
       </div>
-      <div style={{ textAlign: 'center', padding: '2rem', border: `0.5px dashed ${C.border2}`, borderRadius: 12, marginBottom: 16 }}>
-        <div style={{ fontSize: 36, marginBottom: 10 }}>📄</div>
-        <div style={{ fontSize: 14, fontWeight: 600, color: C.white, marginBottom: 8 }}>Noch kein Lebenslauf erstellt</div>
-        <p style={{ fontSize: 12, color: C.mid, marginBottom: 20, lineHeight: 1.6 }}>Erstelle deinen ersten Lebenslauf mit KI — in weniger als 5 Minuten.</p>
-        <Link href="/" style={{ padding: '10px 24px', borderRadius: 10, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
-          Jetzt erstellen →
-        </Link>
+
+      {/* Right: live preview */}
+      <div style={{ position: 'sticky', top: 0, height: 'fit-content' }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: C.mid, marginBottom: 12, textTransform: 'uppercase', letterSpacing: '.05em' }}>Vorschau · {CV_DESIGNS.find(d => d.id === selectedDesign)?.name}</div>
+        <div style={{ width: '100%', aspectRatio: '210/297', borderRadius: 10, overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', border: `0.5px solid ${C.border2}` }}>
+          <MiniCVPreview data={fd} design={selectedDesign} />
+        </div>
+        <p style={{ fontSize: 11, color: C.mid, marginTop: 10, textAlign: 'center' }}>Vorschau aktualisiert sich automatisch</p>
       </div>
+    </div>
+  )
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+        <div>
+          <h2 style={{ fontSize: 22, fontWeight: 700, color: C.white, marginBottom: 4 }}>Lebenslauf</h2>
+          <p style={{ fontSize: 13, color: C.mid }}>Erstelle professionelle Lebensläufe mit KI — in 3 Designs.</p>
+        </div>
+        <button onClick={startNew} style={{ padding: '10px 20px', borderRadius: 10, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 700 }}>
+          + Neuen Lebenslauf erstellen
+        </button>
+      </div>
+
+      {cvs.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '4rem 2rem', border: `0.5px dashed ${C.border2}`, borderRadius: 16, background: 'rgba(255,255,255,0.01)' }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>📄</div>
+          <div style={{ fontSize: 16, fontWeight: 600, color: C.white, marginBottom: 8 }}>Noch kein Lebenslauf erstellt</div>
+          <p style={{ fontSize: 13, color: C.mid, marginBottom: 24, lineHeight: 1.6, maxWidth: 400, margin: '0 auto 24px' }}>Erstelle deinen ersten Lebenslauf mit KI — wähle ein Design, fülle deine Daten ein und exportiere als PDF oder Word.</p>
+          <button onClick={startNew} style={{ padding: '12px 28px', borderRadius: 10, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 700 }}>
+            Jetzt erstellen →
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16 }}>
+          {cvs.map(cv => (
+            <div key={cv.id} style={{ borderRadius: 14, border: `0.5px solid ${C.border}`, background: 'rgba(255,255,255,0.02)', overflow: 'hidden' }}>
+              {/* Mini preview thumbnail */}
+              <div style={{ height: 130, overflow: 'hidden', background: '#fff', cursor: 'pointer' }} onClick={() => openEdit(cv)}>
+                <div style={{ transform: 'scale(0.38)', transformOrigin: 'top left', width: '263%', height: '263%' }}>
+                  <MiniCVPreview data={cv.data} design={cv.design} />
+                </div>
+              </div>
+              <div style={{ padding: '12px 14px' }}>
+                {renamingId === cv.id ? (
+                  <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                    <input value={renameVal} onChange={e => setRenameVal(e.target.value)} autoFocus
+                      style={{ flex: 1, padding: '5px 8px', borderRadius: 6, border: `0.5px solid ${C.border2}`, background: 'rgba(255,255,255,0.08)', color: C.white, fontFamily: 'inherit', fontSize: 12, outline: 'none' }} />
+                    <button onClick={() => { saveCvs(cvs.map(c => c.id === cv.id ? { ...c, name: renameVal } : c)); setRenamingId(null) }}
+                      style={{ padding: '4px 8px', borderRadius: 6, background: C.navy, color: C.white, border: 'none', cursor: 'pointer', fontSize: 11 }}>✓</button>
+                    <button onClick={() => setRenamingId(null)} style={{ padding: '4px 8px', borderRadius: 6, background: 'transparent', color: C.mid, border: `0.5px solid ${C.border}`, cursor: 'pointer', fontSize: 11 }}>✕</button>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 13, fontWeight: 600, color: C.white, marginBottom: 3, cursor: 'text' }} onClick={() => { setRenamingId(cv.id); setRenameVal(cv.name) }}>{cv.name}</div>
+                )}
+                <div style={{ fontSize: 11, color: C.mid, marginBottom: 10 }}>{CV_DESIGNS.find(d => d.id === cv.design)?.name} · {new Date(cv.updatedAt).toLocaleDateString('de-AT', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <button onClick={() => openEdit(cv)} style={{ flex: 1, padding: '6px', borderRadius: 7, background: 'rgba(27,46,107,0.3)', color: C.navy3, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600 }}>Bearbeiten</button>
+                  <button onClick={() => { setExporting(true); exportCvPDF(cv.data, cv.name).finally(() => setExporting(false)) }} style={{ padding: '6px 8px', borderRadius: 7, background: 'rgba(255,255,255,0.04)', color: C.mid, border: `0.5px solid ${C.border}`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 }} title="Als PDF exportieren">📄</button>
+                  <button onClick={() => duplicateCv(cv)} style={{ padding: '6px 8px', borderRadius: 7, background: 'rgba(255,255,255,0.04)', color: C.mid, border: `0.5px solid ${C.border}`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 }} title="Duplizieren">⧉</button>
+                  <button onClick={() => saveCvs(cvs.filter(c => c.id !== cv.id))} style={{ padding: '6px 8px', borderRadius: 7, background: 'rgba(248,113,113,0.08)', color: '#f87171', border: '0.5px solid rgba(248,113,113,0.2)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 }} title="Löschen">🗑</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
 
 // ── Section: Anschreiben ──────────────────────────────────────────────────────
-function LetterSection({ profile }: { profile: UserProfile }) {
+function LetterSection({ profile, isPro, onNeedPro }: { profile: UserProfile; isPro: boolean; onNeedPro: () => void }) {
+  const supabase = createClient()
+  const router = useRouter()
+  const p = profile as UserProfile & Record<string, unknown>
   const [jobTitle, setJobTitle] = useState('')
   const [company, setCompany] = useState('')
+  const [jobDesc, setJobDesc] = useState('')
   const [loading, setLoading] = useState(false)
   const [letter, setLetter] = useState('')
+  const [exporting, setExporting] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [draftSaved, setDraftSaved] = useState(false)
+  const [drafts, setDrafts] = useState<Application[]>([])
+  const [genCount, setGenCount] = useState(() => {
+    if (typeof window === 'undefined') return 0
+    return parseInt(localStorage.getItem('jobbly_gen_count') || '0', 10)
+  })
+
+  const FREE_LIMIT = 3
+
+  const fetchDrafts = useCallback(async () => {
+    const { data } = await supabase.from('applications').select('*')
+      .eq('user_id', profile.id).not('cover_letter', 'is', null).neq('cover_letter', '')
+      .order('created_at', { ascending: false }).limit(20)
+    if (data) setDrafts(data as Application[])
+  }, [supabase, profile.id])
+
+  useEffect(() => { fetchDrafts() }, [fetchDrafts])
 
   async function generate() {
     if (!jobTitle) return
+    if (!isPro && genCount >= FREE_LIMIT) { onNeedPro(); return }
     setLoading(true)
     try {
       const res = await fetch('/api/one-click-apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userData: { fullname: `${profile.first_name || ''} ${profile.last_name || ''}`.trim(), city: '', industry: '', experience: '', skills: '', lastjob: '' },
-          jobTitle, jobCompany: company, jobDescription: `Position: ${jobTitle} bei ${company}`, lang: 'de',
+          userData: {
+            fullname: `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
+            city: String(p.city || ''), industry: String(p.industry || ''),
+            experience: String(p.experience || ''), skills: String(p.skills || ''), lastjob: String(p.position || ''),
+          },
+          jobTitle, jobCompany: company,
+          jobDescription: jobDesc || `Position: ${jobTitle}${company ? ' bei ' + company : ''}`,
+          lang: 'de',
         }),
       })
       const data = await res.json()
       setLetter(data.coverLetter || '')
+      const newCount = genCount + 1
+      setGenCount(newCount)
+      localStorage.setItem('jobbly_gen_count', String(newCount))
     } finally { setLoading(false) }
   }
 
+  async function saveDraft() {
+    if (!letter) return
+    setSaving(true)
+    await supabase.from('applications').insert({
+      user_id: profile.id, position: jobTitle, company: company || null,
+      template: 'classic', style: 'balanced',
+      cv_data: { profil: '', erfahrung: '', ausbildung: '', skills: [], sprachen: '', anschreiben: '' },
+      cover_letter: letter,
+    })
+    setSaving(false); setDraftSaved(true)
+    setTimeout(() => setDraftSaved(false), 2500)
+    fetchDrafts()
+  }
+
+  async function deleteDraft(id: string) {
+    await supabase.from('applications').delete().eq('id', id)
+    fetchDrafts()
+  }
+
+  async function exportLetterPDF() {
+    if (!letter) return; setExporting(true)
+    try {
+      const { default: jsPDF } = await import('jspdf')
+      const doc = new jsPDF()
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(14)
+      doc.text(`${jobTitle}${company ? ' · ' + company : ''}`, 15, 20)
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5)
+      const lines = doc.splitTextToSize(letter, 180); doc.text(lines, 15, 32)
+      doc.save(`Anschreiben_${jobTitle || 'Jobbly'}.pdf`)
+    } finally { setExporting(false) }
+  }
+
+  async function exportLetterWord() {
+    if (!letter) return; setExporting(true)
+    try {
+      const { Document, Packer, Paragraph, TextRun, HeadingLevel } = await import('docx')
+      const children = [
+        new Paragraph({ text: `${jobTitle}${company ? ' · ' + company : ''}`, heading: HeadingLevel.HEADING_1 }),
+        new Paragraph({ text: '' }),
+        ...letter.split('\n').map(line => new Paragraph({ children: [new TextRun({ text: line || ' ' })] })),
+      ]
+      const doc = new Document({ sections: [{ properties: {}, children }] })
+      const blob = await Packer.toBlob(doc)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href = url
+      a.download = `Anschreiben_${jobTitle || 'Jobbly'}.docx`
+      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
+    } finally { setExporting(false) }
+  }
+
+  const btnStyle = (color: string, bg: string) => ({
+    padding: '9px 14px', borderRadius: 9, background: bg, color, border: 'none',
+    cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600,
+    display: 'flex', alignItems: 'center', gap: 6,
+  } as React.CSSProperties)
+
   return (
-    <div style={{ maxWidth: 680 }}>
-      <h2 style={{ fontSize: 22, fontWeight: 700, color: C.white, marginBottom: 8 }}>KI Anschreiben erstellen</h2>
+    <div style={{ maxWidth: 720 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <h2 style={{ fontSize: 22, fontWeight: 700, color: C.white }}>KI Anschreiben erstellen</h2>
+        {!isPro && <span style={{ fontSize: 12, color: C.mid, padding: '4px 10px', borderRadius: 20, border: `0.5px solid ${C.border}` }}>{genCount}/{FREE_LIMIT} kostenlos genutzt</span>}
+      </div>
       <p style={{ fontSize: 13, color: C.mid, marginBottom: 24 }}>Individuelles Anschreiben — perfekt auf den Job zugeschnitten.</p>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
         <div>
           <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 6, fontWeight: 500 }}>Jobtitel *</label>
-          <input value={jobTitle} onChange={e => setJobTitle(e.target.value)} placeholder="z.B. Product Manager" style={{ width: '100%', padding: '10px 14px', borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.04)', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none' }} />
+          <input value={jobTitle} onChange={e => setJobTitle(e.target.value)} placeholder="z.B. Product Manager"
+            style={{ width: '100%', padding: '10px 14px', borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.04)', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none' }} />
         </div>
         <div>
           <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 6, fontWeight: 500 }}>Unternehmen</label>
-          <input value={company} onChange={e => setCompany(e.target.value)} placeholder="z.B. TechVision GmbH" style={{ width: '100%', padding: '10px 14px', borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.04)', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none' }} />
+          <input value={company} onChange={e => setCompany(e.target.value)} placeholder="z.B. TechVision GmbH"
+            style={{ width: '100%', padding: '10px 14px', borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.04)', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none' }} />
         </div>
       </div>
-      <button onClick={generate} disabled={!jobTitle || loading} style={{ padding: '11px 24px', borderRadius: 10, background: jobTitle ? `linear-gradient(135deg, ${C.navy}, ${C.navy2})` : 'rgba(255,255,255,0.06)', color: jobTitle ? C.white : C.mid, border: 'none', cursor: jobTitle ? 'pointer' : 'not-allowed', fontFamily: 'inherit', fontSize: 14, fontWeight: 600, marginBottom: 20 }}>
-        {loading ? '✍️ Wird generiert…' : '⚡ Anschreiben generieren'}
+      <div style={{ marginBottom: 16 }}>
+        <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 6, fontWeight: 500 }}>Stellenbeschreibung einfügen (optional — für bessere Personalisierung)</label>
+        <textarea value={jobDesc} onChange={e => setJobDesc(e.target.value)} rows={4}
+          placeholder="Füge hier die Stellenausschreibung ein…"
+          style={{ width: '100%', padding: '10px 14px', borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.04)', color: C.white, fontFamily: 'inherit', fontSize: 13, resize: 'vertical', outline: 'none' }} />
+      </div>
+
+      <button onClick={generate} disabled={!jobTitle || loading}
+        style={{ padding: '12px 28px', borderRadius: 10, background: jobTitle ? `linear-gradient(135deg, ${C.navy}, ${C.navy2})` : 'rgba(255,255,255,0.06)', color: jobTitle ? C.white : C.mid, border: 'none', cursor: jobTitle ? 'pointer' : 'not-allowed', fontFamily: 'inherit', fontSize: 14, fontWeight: 700, marginBottom: 24, display: 'flex', alignItems: 'center', gap: 8 }}>
+        {loading ? (
+          <><span style={{ display: 'inline-block', width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', animation: 'spin 0.8s linear infinite' }} /> Wird generiert…</>
+        ) : '⚡ Anschreiben generieren'}
       </button>
+
       {letter && (
         <div>
           <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 8, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.06em' }}>Dein Anschreiben</label>
-          <textarea value={letter} onChange={e => setLetter(e.target.value)} rows={14} style={{ width: '100%', padding: 16, borderRadius: 10, border: `0.5px solid rgba(27,46,107,0.35)`, background: 'rgba(27,46,107,0.08)', color: 'rgba(255,255,255,0.85)', fontFamily: 'inherit', fontSize: 13, lineHeight: 1.75, resize: 'vertical', outline: 'none' }} />
-          <button onClick={() => navigator.clipboard.writeText(letter)} style={{ marginTop: 10, padding: '8px 16px', borderRadius: 8, background: 'transparent', color: C.navy3, border: `0.5px solid rgba(27,46,107,0.4)`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600 }}>
-            📋 In Zwischenablage kopieren
-          </button>
+          <textarea value={letter} onChange={e => setLetter(e.target.value)} rows={16}
+            style={{ width: '100%', padding: 16, borderRadius: 10, border: `0.5px solid rgba(27,46,107,0.35)`, background: 'rgba(27,46,107,0.06)', color: 'rgba(255,255,255,0.85)', fontFamily: 'inherit', fontSize: 13, lineHeight: 1.75, resize: 'vertical', outline: 'none' }} />
+          <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+            <button onClick={exportLetterPDF} disabled={exporting} style={btnStyle(C.white, `linear-gradient(135deg, ${C.navy}, ${C.navy2})`)} >📄 Als PDF exportieren</button>
+            <button onClick={exportLetterWord} disabled={exporting} style={btnStyle(C.navy3, 'rgba(27,46,107,0.2)')} >📝 Als Word exportieren</button>
+            <button onClick={saveDraft} disabled={saving || draftSaved} style={btnStyle(C.success, 'rgba(74,222,128,0.08)')} >{draftSaved ? '✓ Gespeichert!' : saving ? '…' : '💾 Als Entwurf speichern'}</button>
+            <button onClick={() => navigator.clipboard.writeText(letter)} style={btnStyle(C.mid, 'rgba(255,255,255,0.04)')} >📋 Kopieren</button>
+          </div>
+        </div>
+      )}
+
+      {drafts.length > 0 && (
+        <div style={{ marginTop: 36 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: C.white, marginBottom: 16 }}>Meine Anschreiben</div>
+          {drafts.map(draft => (
+            <div key={draft.id} style={{ padding: '14px 18px', borderRadius: 12, border: `0.5px solid ${C.border}`, background: 'rgba(255,255,255,0.02)', marginBottom: 8, display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: C.white, marginBottom: 2 }}>{draft.position || '—'} {draft.company ? `· ${draft.company}` : ''}</div>
+                <div style={{ fontSize: 11, color: C.mid, marginBottom: 6 }}>{new Date(draft.created_at).toLocaleDateString('de-AT', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', lineHeight: 1.5, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>{draft.cover_letter?.slice(0, 120)}…</div>
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                <button onClick={() => { setJobTitle(draft.position || ''); setCompany(draft.company || ''); setLetter(draft.cover_letter || '') }}
+                  style={{ padding: '6px 12px', borderRadius: 8, background: 'rgba(27,46,107,0.3)', color: C.navy3, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600 }}>Öffnen</button>
+                <button onClick={() => deleteDraft(draft.id)}
+                  style={{ padding: '6px 10px', borderRadius: 8, background: 'rgba(248,113,113,0.08)', color: '#f87171', border: '0.5px solid rgba(248,113,113,0.2)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12 }}>🗑</button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -715,8 +1186,13 @@ function ProfileSection({ profile }: { profile: UserProfile }) {
   const [saved, setSaved] = useState(false)
   const [pwLoading, setPwLoading] = useState(false)
   const [pwSent, setPwSent] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null)
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [photoUploading, setPhotoUploading] = useState(false)
 
   const p = profile as UserProfile & Record<string, string | number | boolean>
+  const existingAvatar = String(p.avatar_url || '')
 
   const [form, setForm] = useState({
     first_name: profile.first_name || '',
@@ -738,15 +1214,37 @@ function ProfileSection({ profile }: { profile: UserProfile }) {
     email_frequency: String(p.email_frequency || 'daily'),
   })
 
+  function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setPhotoFile(file)
+    setPhotoPreview(URL.createObjectURL(file))
+  }
+
+  async function deletePhoto() {
+    setPhotoPreview(null); setPhotoFile(null)
+    await supabase.from('profiles').update({ avatar_url: null } as Record<string, unknown>).eq('id', profile.id)
+  }
+
   async function save() {
     setSaving(true); setSaved(false)
     try {
+      let avatarUrl = existingAvatar
+      if (photoFile) {
+        setPhotoUploading(true)
+        const ext = photoFile.name.split('.').pop() || 'jpg'
+        const { data: uploadData } = await supabase.storage.from('avatars').upload(`${profile.id}/avatar.${ext}`, photoFile, { upsert: true })
+        if (uploadData) {
+          const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(uploadData.path)
+          avatarUrl = urlData.publicUrl
+        }
+        setPhotoUploading(false)
+      }
       await supabase.from('profiles').update({
-        ...form, ...prefs, ...notifications,
+        ...form, ...prefs, ...notifications, ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
       } as Record<string, unknown>).eq('id', profile.id)
-      setSaved(true)
-      setTimeout(() => setSaved(false), 3000)
-    } finally { setSaving(false) }
+      setSaved(true); setTimeout(() => setSaved(false), 3000)
+    } finally { setSaving(false); setPhotoUploading(false) }
   }
 
   async function sendPwReset() {
@@ -757,86 +1255,100 @@ function ProfileSection({ profile }: { profile: UserProfile }) {
   }
 
   const initials = ((profile.first_name || '?').charAt(0) + (profile.last_name || '').charAt(0)).toUpperCase()
+  const currentPhoto = photoPreview || existingAvatar || null
 
   type FormKey = keyof typeof form
   const field = (label: string, key: FormKey, type = 'text', placeholder = '', disabled = false) => (
     <div style={{ marginBottom: 14 }}>
       <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 6, fontWeight: 500 }}>{label}</label>
       <input type={type} value={form[key]} onChange={e => setForm(prev => ({ ...prev, [key]: e.target.value }))} placeholder={placeholder} disabled={disabled}
-        style={{ width: '100%', padding: '10px 14px', borderRadius: 9, border: `0.5px solid ${disabled ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.1)'}`, background: disabled ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.04)', color: disabled ? C.mid : C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none', cursor: disabled ? 'not-allowed' : 'text' }} />
+        style={{ width: '100%', padding: '10px 14px', minHeight: 44, borderRadius: 9, border: `0.5px solid ${disabled ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.1)'}`, background: disabled ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.04)', color: disabled ? C.mid : C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none', cursor: disabled ? 'not-allowed' : 'text' }} />
     </div>
   )
 
-  const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
-    <div style={{ marginBottom: 28, padding: '24px', borderRadius: 14, border: `0.5px solid ${C.border}`, background: 'rgba(255,255,255,0.01)' }}>
-      <div style={{ fontSize: 14, fontWeight: 700, color: C.white, marginBottom: 20, paddingBottom: 12, borderBottom: `0.5px solid ${C.border}` }}>{title}</div>
+  const Block = ({ title, children }: { title: string; children: React.ReactNode }) => (
+    <div style={{ marginBottom: 20, padding: '20px 24px', borderRadius: 14, border: `0.5px solid ${C.border}`, background: 'rgba(255,255,255,0.01)' }}>
+      <div style={{ fontSize: 14, fontWeight: 700, color: C.white, marginBottom: 16, paddingBottom: 12, borderBottom: `0.5px solid ${C.border}` }}>{title}</div>
       {children}
     </div>
   )
 
   return (
-    <div style={{ maxWidth: 640 }}>
+    <div style={{ width: '100%' }}>
+      <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }} onChange={handlePhotoChange} />
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <h2 style={{ fontSize: 22, fontWeight: 700, color: C.white }}>Meine Daten</h2>
         {saved && <span style={{ fontSize: 12, color: C.success, background: 'rgba(13,43,26,0.8)', border: '0.5px solid #2A6B47', borderRadius: 8, padding: '4px 12px' }}>✓ Gespeichert</span>}
       </div>
 
       {/* Photo */}
-      <Section title="Profilfoto">
+      <Block title="Profilfoto">
         <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-          <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, fontWeight: 700, color: C.white, flexShrink: 0 }}>{initials}</div>
+          <div onClick={() => fileInputRef.current?.click()}
+            style={{ width: 80, height: 80, borderRadius: '50%', background: currentPhoto ? 'transparent' : 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, fontWeight: 700, color: C.white, flexShrink: 0, cursor: 'pointer', overflow: 'hidden', border: `2px solid rgba(99,102,241,0.4)`, position: 'relative' }}
+            title="Foto hochladen">
+            {currentPhoto ? <img src={currentPhoto} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : initials}
+            <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, transition: 'background .2s' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.5)'; (e.currentTarget.nextSibling as HTMLElement | null)?.childNodes }}
+            >
+              <span style={{ opacity: 0, fontSize: 20 }}>📷</span>
+            </div>
+          </div>
           <div>
-            <button style={{ padding: '7px 14px', borderRadius: 8, background: `rgba(27,46,107,0.3)`, color: C.navy3, border: `0.5px solid rgba(27,46,107,0.4)`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, marginRight: 8 }}>📷 Foto hochladen</button>
-            <div style={{ fontSize: 11, color: C.mid, marginTop: 8 }}>JPG, PNG bis 5 MB</div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+              <button onClick={() => fileInputRef.current?.click()} style={{ padding: '7px 14px', borderRadius: 8, background: 'rgba(27,46,107,0.3)', color: C.navy3, border: `0.5px solid rgba(27,46,107,0.4)`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600 }}>📷 Foto hochladen</button>
+              {currentPhoto && <button onClick={deletePhoto} style={{ padding: '7px 12px', borderRadius: 8, background: 'rgba(248,113,113,0.08)', color: '#f87171', border: '0.5px solid rgba(248,113,113,0.25)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12 }}>Foto löschen</button>}
+            </div>
+            <div style={{ fontSize: 11, color: C.mid }}>JPG, PNG bis 5 MB · Klicke auf das Foto oder den Button</div>
           </div>
         </div>
-      </Section>
+      </Block>
 
       {/* Personal info */}
-      <Section title="Persönliche Angaben">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      <Block title="Persönliche Angaben">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
           {field('Vorname', 'first_name', 'text', 'Max')}
           {field('Nachname', 'last_name', 'text', 'Mustermann')}
         </div>
         <div style={{ marginBottom: 14 }}>
           <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 6, fontWeight: 500 }}>Email</label>
-          <input type="email" value={profile.email} disabled style={{ width: '100%', padding: '10px 14px', borderRadius: 9, border: '0.5px solid rgba(255,255,255,0.05)', background: 'rgba(255,255,255,0.02)', color: C.mid, fontFamily: 'inherit', fontSize: 13, outline: 'none', cursor: 'not-allowed' }} />
+          <input type="email" value={profile.email} disabled style={{ width: '100%', padding: '10px 14px', minHeight: 44, borderRadius: 9, border: '0.5px solid rgba(255,255,255,0.05)', background: 'rgba(255,255,255,0.02)', color: C.mid, fontFamily: 'inherit', fontSize: 13, outline: 'none', cursor: 'not-allowed' }} />
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
           {field('Telefon', 'phone', 'tel', '+43 ...')}
           {field('Stadt', 'city', 'text', 'Wien')}
         </div>
         {field('LinkedIn', 'linkedin', 'url', 'https://linkedin.com/in/...')}
         {field('Geburtstag', 'birthday', 'date')}
-      </Section>
+      </Block>
 
       {/* Job preferences */}
-      <Section title="Job-Präferenzen">
+      <Block title="Job-Präferenzen">
         <div style={{ marginBottom: 14 }}>
           <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 6, fontWeight: 500 }}>Branche</label>
-          <input value={prefs.industry} onChange={e => setPrefs(p => ({ ...p, industry: e.target.value }))} placeholder="z.B. IT & Technologie" style={{ width: '100%', padding: '10px 14px', borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.04)', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none' }} />
+          <input value={prefs.industry} onChange={e => setPrefs(pr => ({ ...pr, industry: e.target.value }))} placeholder="z.B. IT & Technologie" style={{ width: '100%', padding: '10px 14px', minHeight: 44, borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.04)', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none' }} />
         </div>
         <div style={{ marginBottom: 14 }}>
           <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 6, fontWeight: 500 }}>Wunschposition</label>
-          <input value={prefs.position} onChange={e => setPrefs(p => ({ ...p, position: e.target.value }))} placeholder="z.B. Product Manager" style={{ width: '100%', padding: '10px 14px', borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.04)', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none' }} />
+          <input value={prefs.position} onChange={e => setPrefs(pr => ({ ...pr, position: e.target.value }))} placeholder="z.B. Product Manager" style={{ width: '100%', padding: '10px 14px', minHeight: 44, borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.04)', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none' }} />
         </div>
         <div style={{ marginBottom: 14 }}>
           <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 8, fontWeight: 500 }}>Arbeitsmodell</label>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {[['remote', '🏠 Remote'], ['hybrid', '🔄 Hybrid'], ['office', '🏢 Vor Ort']].map(([v, l]) => (
-              <button key={v} onClick={() => setPrefs(p => ({ ...p, work_model: v }))} style={{ flex: 1, padding: '9px', borderRadius: 9, border: `0.5px solid ${prefs.work_model === v ? C.navy2 : 'rgba(255,255,255,0.1)'}`, background: prefs.work_model === v ? 'rgba(27,46,107,0.3)' : 'transparent', color: prefs.work_model === v ? C.navy3 : C.mid, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 500, transition: 'all .15s' }}>{l}</button>
+              <button key={v} onClick={() => setPrefs(pr => ({ ...pr, work_model: v }))} style={{ flex: 1, minWidth: 100, padding: '9px', borderRadius: 9, border: `0.5px solid ${prefs.work_model === v ? C.navy2 : 'rgba(255,255,255,0.1)'}`, background: prefs.work_model === v ? 'rgba(27,46,107,0.3)' : 'transparent', color: prefs.work_model === v ? C.navy3 : C.mid, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 500, transition: 'all .15s' }}>{l}</button>
             ))}
           </div>
         </div>
         <div>
           <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 8, fontWeight: 500 }}>Wunschgehalt: {prefs.salary_target.toLocaleString('de')} €</label>
-          <input type="range" min={25000} max={150000} step={5000} value={prefs.salary_target} onChange={e => setPrefs(p => ({ ...p, salary_target: Number(e.target.value) }))}
+          <input type="range" min={25000} max={150000} step={5000} value={prefs.salary_target} onChange={e => setPrefs(pr => ({ ...pr, salary_target: Number(e.target.value) }))}
             style={{ width: '100%', accentColor: C.purple, cursor: 'pointer' }} />
         </div>
-      </Section>
+      </Block>
 
       {/* Notifications */}
-      <Section title="Benachrichtigungen">
+      <Block title="Benachrichtigungen">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <div>
             <div style={{ fontSize: 13, color: C.white, fontWeight: 500 }}>Job-Alerts</div>
@@ -848,28 +1360,27 @@ function ProfileSection({ profile }: { profile: UserProfile }) {
         </div>
         <div>
           <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 8, fontWeight: 500 }}>E-Mail-Häufigkeit</label>
-          <select value={notifications.email_frequency} onChange={e => setNotifications(n => ({ ...n, email_frequency: e.target.value }))} style={{ padding: '9px 14px', borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: '#0D1117', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none', cursor: 'pointer' }}>
+          <select value={notifications.email_frequency} onChange={e => setNotifications(n => ({ ...n, email_frequency: e.target.value }))} style={{ padding: '9px 14px', minHeight: 44, borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: '#0D1117', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none', cursor: 'pointer' }}>
             <option value="instant">Sofort</option>
             <option value="daily">Täglich</option>
             <option value="weekly">Wöchentlich</option>
           </select>
         </div>
-      </Section>
+      </Block>
 
       {/* Account */}
-      <Section title="Konto">
+      <Block title="Konto">
         <div style={{ marginBottom: 14 }}>
           {pwSent ? (
             <div style={{ fontSize: 12, color: C.success, padding: '8px 14px', background: 'rgba(13,43,26,0.8)', border: '0.5px solid #2A6B47', borderRadius: 8, display: 'inline-block' }}>✓ Reset-Link wurde gesendet</div>
           ) : (
-            <button onClick={sendPwReset} disabled={pwLoading} style={{ padding: '9px 16px', borderRadius: 9, background: 'rgba(255,255,255,0.05)', color: C.mid, border: `0.5px solid ${C.border}`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13 }}>{pwLoading ? 'Wird gesendet…' : '🔑 Passwort ändern'}</button>
+            <button onClick={sendPwReset} disabled={pwLoading} style={{ padding: '9px 16px', minHeight: 44, borderRadius: 9, background: 'rgba(255,255,255,0.05)', color: C.mid, border: `0.5px solid ${C.border}`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13 }}>{pwLoading ? 'Wird gesendet…' : '🔑 Passwort ändern'}</button>
           )}
         </div>
-        <button style={{ padding: '9px 16px', borderRadius: 9, background: 'rgba(248,113,113,0.08)', color: '#f87171', border: '0.5px solid rgba(248,113,113,0.25)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13 }}>🗑 Konto löschen</button>
-      </Section>
+      </Block>
 
-      <button onClick={save} disabled={saving} style={{ width: '100%', padding: 13, borderRadius: 10, background: saving ? 'rgba(255,255,255,0.06)' : `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: saving ? C.mid : C.white, border: 'none', cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 700 }}>
-        {saving ? 'Wird gespeichert…' : 'Änderungen speichern'}
+      <button onClick={save} disabled={saving} style={{ width: '100%', padding: 14, borderRadius: 10, background: saving ? 'rgba(255,255,255,0.06)' : `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: saving ? C.mid : C.white, border: 'none', cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+        {saving ? (photoUploading ? '📷 Foto wird hochgeladen…' : 'Wird gespeichert…') : 'Änderungen speichern'}
       </button>
     </div>
   )
@@ -930,13 +1441,50 @@ function StatsSection({ applications }: { applications: Application[] }) {
 
 // ── Section: Einstellungen ────────────────────────────────────────────────────
 function SettingsSection({ profile, isPro, onUpgrade }: { profile: UserProfile; isPro: boolean; onUpgrade: () => void }) {
-  const [theme, setTheme] = useState('dark')
-  const [language, setLanguage] = useState('de')
+  const supabase = createClient()
+  const router = useRouter()
+
+  const [theme, setThemeState] = useState(() => typeof window !== 'undefined' ? localStorage.getItem('jobbly_theme') || 'dark' : 'dark')
+  const [language, setLanguageState] = useState(() => {
+    if (typeof window === 'undefined') return 'de'
+    const saved = localStorage.getItem('jobbly_lang')
+    if (saved) return saved
+    const br = navigator.language.toLowerCase()
+    if (br.startsWith('de')) return 'de'
+    if (br.startsWith('tr')) return 'tr'
+    if (br.startsWith('es')) return 'es'
+    if (br.startsWith('fr')) return 'fr'
+    if (br.startsWith('pl')) return 'pl'
+    return 'en'
+  })
   const [emailAlerts, setEmailAlerts] = useState(true)
   const [showToRecruiters, setShowToRecruiters] = useState(false)
   const [matchThreshold, setMatchThreshold] = useState('70')
   const [portalLoading, setPortalLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [pwLoading, setPwLoading] = useState(false)
+  const [pwSent, setPwSent] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  function applyTheme(t: string) {
+    const html = document.documentElement
+    html.classList.remove('theme-light', 'theme-dark', 'theme-system')
+    if (t === 'light') html.classList.add('theme-light')
+    else if (t === 'system') {
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+      if (!prefersDark) html.classList.add('theme-light')
+    }
+    localStorage.setItem('jobbly_theme', t)
+    setThemeState(t)
+  }
+
+  function applyLanguage(l: string) {
+    localStorage.setItem('jobbly_lang', l)
+    setLanguageState(l)
+    supabase.from('profiles').update({ preferred_lang: l } as Record<string, unknown>).eq('id', profile.id).then(() => {})
+  }
 
   async function openPortal() {
     setPortalLoading(true)
@@ -945,6 +1493,34 @@ function SettingsSection({ profile, isPro, onUpgrade }: { profile: UserProfile; 
       const data = await res.json()
       if (data.url) window.location.href = data.url
     } finally { setPortalLoading(false) }
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    try {
+      await supabase.from('profiles').update({
+        job_alerts: emailAlerts,
+        match_threshold: matchThreshold,
+        visible_to_recruiters: showToRecruiters,
+      } as Record<string, unknown>).eq('id', profile.id)
+      setSaved(true); setTimeout(() => setSaved(false), 3000)
+    } finally { setSaving(false) }
+  }
+
+  async function handlePwReset() {
+    setPwLoading(true)
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || window.location.origin
+    await supabase.auth.resetPasswordForEmail(profile.email, { redirectTo: `${appUrl}/auth/reset-password` })
+    setPwLoading(false); setPwSent(true)
+  }
+
+  async function handleDeleteAccount() {
+    setDeleting(true)
+    try {
+      await fetch('/api/user/delete', { method: 'DELETE' })
+      await supabase.auth.signOut()
+      router.push('/')
+    } finally { setDeleting(false) }
   }
 
   const Toggle = ({ label, desc, val, onChange }: { label: string; desc?: string; val: boolean; onChange: (v: boolean) => void }) => (
@@ -974,15 +1550,17 @@ function SettingsSection({ profile, isPro, onUpgrade }: { profile: UserProfile; 
       </div>
 
       <Block title="Erscheinungsbild">
+        <p style={{ fontSize: 12, color: C.mid, marginBottom: 12 }}>Wähle dein bevorzugtes Design. Die Änderung wird sofort übernommen.</p>
         <div style={{ display: 'flex', gap: 8 }}>
           {[['dark', '🌙 Dark'], ['light', '☀️ Light'], ['system', '💻 System']].map(([v, l]) => (
-            <button key={v} onClick={() => setTheme(v)} style={{ flex: 1, padding: '9px', borderRadius: 9, border: `0.5px solid ${theme === v ? C.navy2 : 'rgba(255,255,255,0.1)'}`, background: theme === v ? 'rgba(27,46,107,0.3)' : 'transparent', color: theme === v ? C.navy3 : C.mid, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 500 }}>{l}</button>
+            <button key={v} onClick={() => applyTheme(v)} style={{ flex: 1, padding: '9px', borderRadius: 9, border: `0.5px solid ${theme === v ? C.navy2 : 'rgba(255,255,255,0.1)'}`, background: theme === v ? 'rgba(27,46,107,0.3)' : 'transparent', color: theme === v ? C.navy3 : C.mid, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 500 }}>{l}</button>
           ))}
         </div>
       </Block>
 
       <Block title="Sprache">
-        <select value={language} onChange={e => setLanguage(e.target.value)} style={{ padding: '9px 14px', borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: '#0D1117', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none', cursor: 'pointer' }}>
+        <p style={{ fontSize: 12, color: C.mid, marginBottom: 12 }}>Automatisch erkannt · Manuelle Auswahl überschreibt.</p>
+        <select value={language} onChange={e => applyLanguage(e.target.value)} style={{ padding: '9px 14px', borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: '#0D1117', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none', cursor: 'pointer', width: '100%' }}>
           {[['de', '🇩🇪 Deutsch'], ['en', '🇬🇧 English'], ['tr', '🇹🇷 Türkçe'], ['es', '🇪🇸 Español'], ['fr', '🇫🇷 Français'], ['pl', '🇵🇱 Polski']].map(([v, l]) => (
             <option key={v} value={v}>{l}</option>
           ))}
@@ -1003,36 +1581,49 @@ function SettingsSection({ profile, isPro, onUpgrade }: { profile: UserProfile; 
 
       <Block title="Datenschutz">
         <Toggle label="Profil für Recruiter sichtbar" desc="Recruiter können dich aktiv kontaktieren" val={showToRecruiters} onChange={setShowToRecruiters} />
-        <div style={{ paddingTop: 14, display: 'flex', gap: 10 }}>
-          <button style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', color: C.mid, border: `0.5px solid ${C.border}`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12 }}>📥 Daten exportieren</button>
-          <button style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(248,113,113,0.08)', color: '#f87171', border: '0.5px solid rgba(248,113,113,0.2)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12 }}>🗑 Alle Daten löschen</button>
+        <div style={{ paddingTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button onClick={() => window.open('/api/user/export', '_blank')} style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', color: C.mid, border: `0.5px solid ${C.border}`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12 }}>📥 Daten exportieren (DSGVO)</button>
+          <button onClick={() => setShowDeleteConfirm(true)} style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(248,113,113,0.08)', color: '#f87171', border: '0.5px solid rgba(248,113,113,0.2)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12 }}>🗑 Alle Daten löschen</button>
         </div>
+        {showDeleteConfirm && (
+          <div style={{ marginTop: 14, padding: '16px', borderRadius: 10, background: 'rgba(248,113,113,0.08)', border: '0.5px solid rgba(248,113,113,0.3)' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#f87171', marginBottom: 8 }}>⚠ Bist du sicher?</div>
+            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)', marginBottom: 14, lineHeight: 1.5 }}>Diese Aktion löscht deinen Account und alle Daten unwiderruflich. Sie kann nicht rückgängig gemacht werden.</p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={handleDeleteAccount} disabled={deleting} style={{ padding: '8px 16px', borderRadius: 8, background: '#ef4444', color: '#fff', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 700 }}>{deleting ? 'Wird gelöscht…' : 'Ja, Account löschen'}</button>
+              <button onClick={() => setShowDeleteConfirm(false)} style={{ padding: '8px 14px', borderRadius: 8, background: 'transparent', color: C.mid, border: `0.5px solid ${C.border}`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12 }}>Abbrechen</button>
+            </div>
+          </div>
+        )}
       </Block>
 
       <Block title="Abonnement">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
           <div>
             <div style={{ fontSize: 13, fontWeight: 600, color: C.white }}>{isPro ? '⭐ Jobbly Premium' : 'Free Plan'}</div>
-            <div style={{ fontSize: 11, color: C.mid, marginTop: 3 }}>{isPro ? 'Aktiv · €9.99/Monat' : 'Kostenlos — 0 von 3 Bewerbungen verbraucht'}</div>
+            <div style={{ fontSize: 11, color: C.mid, marginTop: 3 }}>{isPro ? 'Aktiv · €9.99/Monat · Jederzeit kündbar' : 'Kostenlos — bis zu 3 Anschreiben inklusive'}</div>
           </div>
           {isPro ? (
             <button onClick={openPortal} disabled={portalLoading} style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(248,113,113,0.08)', color: '#f87171', border: '0.5px solid rgba(248,113,113,0.2)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12 }}>{portalLoading ? '…' : 'Kündigen'}</button>
           ) : (
-            <button onClick={onUpgrade} style={{ padding: '8px 14px', borderRadius: 8, background: `linear-gradient(135deg, ${C.purple}, ${C.purple2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600 }}>Upgraden</button>
+            <button onClick={onUpgrade} style={{ padding: '8px 14px', borderRadius: 8, background: `linear-gradient(135deg, ${C.purple}, ${C.purple2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600 }}>Jetzt upgraden</button>
           )}
         </div>
       </Block>
 
       <Block title="Sicherheit">
-        <div style={{ fontSize: 13, color: C.mid, marginBottom: 12 }}>Passwort-Reset und aktive Sitzungen verwalten.</div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', color: C.mid, border: `0.5px solid ${C.border}`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12 }}>🔑 Passwort ändern</button>
-          <button style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', color: C.mid, border: `0.5px solid ${C.border}`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, opacity: 0.5 }}>🔐 2FA — Demnächst</button>
+          {pwSent ? (
+            <div style={{ fontSize: 12, color: C.success, padding: '8px 14px', background: 'rgba(13,43,26,0.8)', border: '0.5px solid #2A6B47', borderRadius: 8, display: 'inline-block' }}>✓ E-Mail wurde gesendet</div>
+          ) : (
+            <button onClick={handlePwReset} disabled={pwLoading} style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', color: C.mid, border: `0.5px solid ${C.border}`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12 }}>{pwLoading ? 'Wird gesendet…' : '🔑 Passwort ändern'}</button>
+          )}
+          <button disabled style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', color: C.mid, border: `0.5px solid ${C.border}`, cursor: 'not-allowed', fontFamily: 'inherit', fontSize: 12, opacity: 0.5 }}>🔐 2FA — Demnächst</button>
         </div>
       </Block>
 
-      <button onClick={() => { setSaved(true); setTimeout(() => setSaved(false), 3000) }} style={{ width: '100%', padding: 13, borderRadius: 10, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 700 }}>
-        Einstellungen speichern
+      <button onClick={handleSave} disabled={saving} style={{ width: '100%', padding: 13, borderRadius: 10, background: saving ? 'rgba(255,255,255,0.06)' : `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: saving ? C.mid : C.white, border: 'none', cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 700 }}>
+        {saving ? 'Wird gespeichert…' : 'Einstellungen speichern'}
       </button>
     </div>
   )
@@ -1045,7 +1636,8 @@ function CoursesSection() {
       <h2 style={{ fontSize: 22, fontWeight: 700, color: C.white, marginBottom: 8 }}>Karriere Kurse</h2>
       <p style={{ fontSize: 13, color: C.mid, marginBottom: 24 }}>Lerne die gefragtesten Skills und steigere deine Chancen.</p>
       {COURSES.map(course => (
-        <div key={course.name} style={{ display: 'flex', gap: 16, alignItems: 'center', padding: '16px 18px', borderRadius: 12, border: `0.5px solid ${C.border}`, background: 'rgba(255,255,255,0.015)', marginBottom: 10, cursor: 'pointer', transition: 'all .2s' }}
+        <div key={course.name} onClick={() => window.open(course.url === '#' ? `https://www.${course.platform.toLowerCase()}.com` : course.url, '_blank')}
+          style={{ display: 'flex', gap: 16, alignItems: 'center', padding: '16px 18px', borderRadius: 12, border: `0.5px solid ${C.border}`, background: 'rgba(255,255,255,0.015)', marginBottom: 10, cursor: 'pointer', transition: 'all .2s' }}
           onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(27,46,107,0.5)'; e.currentTarget.style.background = 'rgba(27,46,107,0.05)' }}
           onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.background = 'rgba(255,255,255,0.015)' }}>
           <div style={{ width: 48, height: 48, borderRadius: 10, background: course.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: '#fff', flexShrink: 0 }}>{course.initial}</div>
@@ -1115,8 +1707,8 @@ export default function DashboardClient({ profile, applications, justUpgraded }:
     switch (activeNav) {
       case 'jobs': return <JobsSection jobs={mockJobs} isPro={isPro} onSelect={j => setSelectedJob(j)} onNeedPro={() => setShowUpgrade(true)} />
       case 'applications': return <ApplicationsSection applications={applications} profile={profile} />
-      case 'cv': return <CVSection />
-      case 'letter': return <LetterSection profile={profile} />
+      case 'cv': return <CVSection profile={profile} isPro={isPro} />
+      case 'letter': return <LetterSection profile={profile} isPro={isPro} onNeedPro={() => setShowUpgrade(true)} />
       case 'profile': return <ProfileSection profile={profile} />
       case 'stats': return <StatsSection applications={applications} />
       case 'courses': return <CoursesSection />
@@ -1143,10 +1735,10 @@ export default function DashboardClient({ profile, applications, justUpgraded }:
           </div>
 
           <div style={{ display: 'flex', gap: 14, marginBottom: 32 }}>
-            <StatCard icon="💼" value="23" label="Passende Jobs" sub="+5 heute" subColor={C.success} />
-            <StatCard icon="📊" value="85%" label="Profil Match" sub="Sehr gut" subColor={C.success} />
-            <StatCard icon="📋" value={String(applications.length)} label="Bewerbungen" sub="Insgesamt" subColor={C.mid} />
-            <StatCard icon="⭐" value="3" label="Einladungen" sub="Letzte 30 Tage" subColor={C.success} />
+            <StatCard icon="💼" value="23" label="Passende Jobs" sub="+5 heute" subColor={C.success} onClick={() => setActiveNav('jobs')} />
+            <StatCard icon="📊" value="85%" label="Profil Match" sub="Sehr gut" subColor={C.success} onClick={() => setActiveNav('profile')} />
+            <StatCard icon="📋" value={String(applications.length)} label="Bewerbungen" sub="Insgesamt" subColor={C.mid} onClick={() => setActiveNav('applications')} />
+            <StatCard icon="⭐" value="3" label="Einladungen" sub="Letzte 30 Tage" subColor={C.success} onClick={() => setActiveNav('applications')} />
           </div>
 
           {applications.length === 0 && (
@@ -1202,7 +1794,7 @@ export default function DashboardClient({ profile, applications, justUpgraded }:
             <main style={{ flex: 1, overflowY: 'auto', padding: '28px 32px' }}>
               {renderContent()}
             </main>
-            {activeNav === 'dashboard' && <RightSidebar applications={applications} />}
+            {activeNav === 'dashboard' && <RightSidebar applications={applications} onNav={setActiveNav} />}
           </div>
         </div>
       </div>
