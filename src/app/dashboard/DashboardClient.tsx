@@ -363,8 +363,18 @@ function StatCard({ icon, value, label, sub, subColor, onClick }: { icon: string
 }
 
 // ── Job card ──────────────────────────────────────────────────────────────────
+const BOOKMARKS_KEY = 'jobbly_bookmarks'
+function getBookmarks(): string[] {
+  try { return JSON.parse(localStorage.getItem(BOOKMARKS_KEY) || '[]') } catch { return [] }
+}
+function setBookmarkPersisted(id: string, val: boolean) {
+  const bm = getBookmarks()
+  const next = val ? [...new Set([...bm, id])] : bm.filter(x => x !== id)
+  localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(next))
+}
+
 function JobCard({ job, onClick, compact }: { job: ReturnType<typeof makeMockJobs>[0]; onClick: () => void; compact?: boolean }) {
-  const [bookmarked, setBookmarked] = useState(false)
+  const [bookmarked, setBookmarked] = useState(() => typeof window !== 'undefined' ? getBookmarks().includes(job.id) : false)
   const matchColor = job.match >= 85 ? C.success : job.match >= 70 ? C.amber : C.mid
 
   return (
@@ -390,7 +400,7 @@ function JobCard({ job, onClick, compact }: { job: ReturnType<typeof makeMockJob
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
           <div style={{ fontSize: 20, fontWeight: 700, color: matchColor, lineHeight: 1 }}>{job.match}%</div>
           <div style={{ fontSize: 10, color: C.mid }}>Match</div>
-          <button onClick={e => { e.stopPropagation(); setBookmarked(b => !b) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 15, color: bookmarked ? C.amber : C.mid, padding: 0 }}>
+          <button onClick={e => { e.stopPropagation(); const next = !bookmarked; setBookmarked(next); setBookmarkPersisted(job.id, next) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 15, color: bookmarked ? C.amber : C.mid, padding: 0, transition: 'color .15s' }} title={bookmarked ? 'Gespeichert' : 'Job speichern'}>
             {bookmarked ? '★' : '☆'}
           </button>
         </div>
@@ -533,19 +543,31 @@ function JobDetailModal({ job, profile, onClose }: { job: ReturnType<typeof make
 }
 
 // ── Right Sidebar ─────────────────────────────────────────────────────────────
-function RightSidebar({ applications, onNav }: { applications: Application[]; onNav: (id: NavId) => void }) {
-  const [salary, setSalary] = useState(60000)
+function RightSidebar({ applications, profile, onNav }: { applications: Application[]; profile: UserProfile; onNav: (id: NavId) => void }) {
+  const supabase = createClient()
+  const p = profile as UserProfile & Record<string, unknown>
+  const [salary, setSalary] = useState<number>(() => Number(p.salary_target) || 60000)
   const [editingSalary, setEditingSalary] = useState(false)
+  const [salarySaving, setSalarySaving] = useState(false)
   const [salarySaved, setSalarySaved] = useState(false)
+
+  async function saveSalary() {
+    setSalarySaving(true)
+    await supabase.from('profiles').update({ salary_target: salary } as Record<string, unknown>).eq('id', profile.id)
+    setSalarySaving(false); setEditingSalary(false)
+    setSalarySaved(true); setTimeout(() => setSalarySaved(false), 2500)
+  }
+
   const activity = useMemo(() => {
     if (applications.length === 0) return [
-      { icon: '🎯', text: 'Profil anlegen', sub: 'Starte deinen ersten Lebenslauf', time: 'Jetzt' },
-      { icon: '🔔', text: 'Einladung erhalten', sub: 'Digital Solutions AG', time: 'Vor 5 Stunden' },
-      { icon: '⭐', text: 'Neuer Job Match', sub: 'Product Manager bei TechCorp', time: 'Vor 1 Tag' },
+      { icon: '🎯', text: 'Profil anlegen', sub: 'Starte deinen ersten Lebenslauf', time: 'Jetzt', nav: 'profile' as NavId },
+      { icon: '🔔', text: 'Einladung erhalten', sub: 'Digital Solutions AG', time: 'Vor 5 Stunden', nav: 'applications' as NavId },
+      { icon: '⭐', text: 'Neuer Job Match', sub: 'Product Manager bei TechCorp', time: 'Vor 1 Tag', nav: 'jobs' as NavId },
     ]
     return applications.slice(0, 3).map((app, i) => ({
       icon: '📋', text: 'Bewerbung angesehen', sub: `${app.company || app.position}`,
       time: ['Vor 2 Stunden', 'Vor 5 Stunden', 'Vor 1 Tag'][i] || 'Kürzlich',
+      nav: 'applications' as NavId,
     }))
   }, [applications])
 
@@ -565,15 +587,15 @@ function RightSidebar({ applications, onNav }: { applications: Application[]; on
         <div style={{ fontSize: 12, color: C.mid, marginBottom: 12 }}>Zielgehalt: {salary.toLocaleString('de')} €</div>
         {editingSalary && (
           <>
-            <input type="range" min={45000} max={75000} step={1000} value={salary} onChange={e => setSalary(Number(e.target.value))}
+            <input type="range" min={25000} max={150000} step={1000} value={salary} onChange={e => setSalary(Number(e.target.value))}
               style={{ width: '100%', accentColor: C.purple, cursor: 'pointer', height: 4 }} />
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, marginBottom: 10 }}>
-              <span style={{ fontSize: 11, color: C.mid }}>45K €</span>
-              <span style={{ fontSize: 11, color: C.mid }}>75K €</span>
+              <span style={{ fontSize: 11, color: C.mid }}>25K €</span>
+              <span style={{ fontSize: 11, color: C.mid }}>150K €</span>
             </div>
-            <button onClick={() => { setEditingSalary(false); setSalarySaved(true); setTimeout(() => setSalarySaved(false), 2000) }}
+            <button onClick={saveSalary} disabled={salarySaving}
               style={{ width: '100%', padding: '7px', borderRadius: 8, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, marginBottom: 8 }}>
-              Speichern
+              {salarySaving ? 'Speichern…' : 'Speichern'}
             </button>
           </>
         )}
@@ -608,12 +630,16 @@ function RightSidebar({ applications, onNav }: { applications: Application[]; on
           <span style={{ fontSize: 12, color: C.mid, cursor: 'pointer' }}>Alle ▾</span>
         </div>
         {activity.map((a, i) => (
-          <div key={i} style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+          <div key={i} onClick={() => a.nav && onNav(a.nav)}
+            style={{ display: 'flex', gap: 10, marginBottom: 14, cursor: a.nav ? 'pointer' : 'default', borderRadius: 8, padding: '4px 6px', marginLeft: -6, transition: 'background .15s' }}
+            onMouseEnter={e => { if (a.nav) e.currentTarget.style.background = 'rgba(255,255,255,0.03)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>
             <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(27,46,107,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>{a.icon}</div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 12, fontWeight: 500, color: C.white }}>{a.text}</div>
               <div style={{ fontSize: 11, color: C.mid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.sub} · {a.time}</div>
             </div>
+            {a.nav && <span style={{ fontSize: 10, color: C.mid, alignSelf: 'center', flexShrink: 0 }}>→</span>}
           </div>
         ))}
       </section>
@@ -2090,7 +2116,22 @@ export default function DashboardClient({ profile, applications, justUpgraded }:
                 )}
               </p>
             </div>
-            <div style={{ width: 140, height: 90, flexShrink: 0, background: 'rgba(27,46,107,0.12)', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32 }}>📄✨</div>
+            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+              <button onClick={() => setActiveNav('cv')} title="Lebenslauf erstellen"
+                style={{ width: 56, height: 56, borderRadius: 14, background: 'rgba(27,46,107,0.18)', border: `0.5px solid rgba(27,46,107,0.35)`, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, transition: 'all .15s' }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(27,46,107,0.35)'; e.currentTarget.style.borderColor = C.navy2 }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(27,46,107,0.18)'; e.currentTarget.style.borderColor = 'rgba(27,46,107,0.35)' }}>
+                <span style={{ fontSize: 22 }}>📄</span>
+                <span style={{ fontSize: 9, color: C.mid, fontWeight: 500, letterSpacing: '.04em' }}>CV</span>
+              </button>
+              <button onClick={() => setActiveNav('letter')} title="Anschreiben erstellen"
+                style={{ width: 56, height: 56, borderRadius: 14, background: 'rgba(99,102,241,0.12)', border: `0.5px solid rgba(99,102,241,0.25)`, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, transition: 'all .15s' }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.25)'; e.currentTarget.style.borderColor = 'rgba(99,102,241,0.5)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.12)'; e.currentTarget.style.borderColor = 'rgba(99,102,241,0.25)' }}>
+                <span style={{ fontSize: 22 }}>✨</span>
+                <span style={{ fontSize: 9, color: C.mid, fontWeight: 500, letterSpacing: '.04em' }}>Brief</span>
+              </button>
+            </div>
           </div>
 
           <div style={{ display: 'flex', gap: 14, marginBottom: 32 }}>
@@ -2153,7 +2194,7 @@ export default function DashboardClient({ profile, applications, justUpgraded }:
             <main style={{ flex: 1, overflowY: 'auto', padding: '28px 32px' }}>
               {renderContent()}
             </main>
-            {activeNav === 'dashboard' && <RightSidebar applications={applications} onNav={setActiveNav} />}
+            {activeNav === 'dashboard' && <RightSidebar applications={applications} profile={profile} onNav={setActiveNav} />}
           </div>
         </div>
       </div>
