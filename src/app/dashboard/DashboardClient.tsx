@@ -12,6 +12,7 @@ interface Props {
   profile: UserProfile
   applications: Application[]
   justUpgraded: boolean
+  upgradeStatus?: 'success' | 'cancelled' | null
 }
 
 const C = {
@@ -973,7 +974,7 @@ function MiniCVPreview({ data, design }: { data: CVVersion['data']; design: stri
 }
 
 // ── Section: CV ───────────────────────────────────────────────────────────────
-function CVSection({ profile, isPro }: { profile: UserProfile; isPro: boolean }) {
+function CVSection({ profile, isPro, onNeedPro }: { profile: UserProfile; isPro: boolean; onNeedPro: () => void }) {
   const p = profile as UserProfile & Record<string, unknown>
   const storageKey = `jobbly_cvs_${profile.id}`
   const [cvs, setCvs] = useState<CVVersion[]>(() => {
@@ -1061,12 +1062,17 @@ function CVSection({ profile, isPro }: { profile: UserProfile; isPro: boolean })
         <div style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: C.mid, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '.05em' }}>Design wählen</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-            {CV_DESIGNS.map(d => (
-              <button key={d.id} onClick={() => setSelectedDesign(d.id)} style={{ padding: '10px 8px', borderRadius: 10, border: `1.5px solid ${selectedDesign === d.id ? C.navy2 : C.border}`, background: selectedDesign === d.id ? 'rgba(27,46,107,0.3)' : 'rgba(255,255,255,0.02)', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'center', transition: 'all .15s' }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: selectedDesign === d.id ? C.navy3 : C.white, marginBottom: 3 }}>{d.name}</div>
-                <div style={{ fontSize: 10, color: C.mid }}>{d.desc}</div>
-              </button>
-            ))}
+            {CV_DESIGNS.map(d => {
+              const locked = d.id !== 'nordic' && !isPro
+              return (
+                <button key={d.id} onClick={() => locked ? onNeedPro() : setSelectedDesign(d.id)}
+                  style={{ padding: '10px 8px', borderRadius: 10, border: `1.5px solid ${selectedDesign === d.id ? C.navy2 : C.border}`, background: selectedDesign === d.id ? 'rgba(27,46,107,0.3)' : 'rgba(255,255,255,0.02)', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'center', transition: 'all .15s', position: 'relative', opacity: locked ? 0.65 : 1 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: selectedDesign === d.id ? C.navy3 : C.white, marginBottom: 3 }}>{d.name}</div>
+                  <div style={{ fontSize: 10, color: C.mid }}>{d.desc}</div>
+                  {locked && <span style={{ position: 'absolute', top: 4, right: 5, fontSize: 10, color: C.amber }}>⭐ Pro</span>}
+                </button>
+              )
+            })}
           </div>
         </div>
 
@@ -1089,11 +1095,11 @@ function CVSection({ profile, isPro }: { profile: UserProfile; isPro: boolean })
           <button onClick={saveCv} style={{ flex: 1, padding: '11px', borderRadius: 9, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 700 }}>
             {saved ? '✓ Gespeichert!' : '💾 Speichern'}
           </button>
-          <button onClick={() => { setExporting(true); exportCvPDF(fd, cvName).finally(() => setExporting(false)) }} disabled={exporting} style={{ padding: '11px 14px', borderRadius: 9, background: 'rgba(255,255,255,0.05)', color: C.white, border: `0.5px solid ${C.border2}`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600 }}>
-            {exporting ? '…' : '📄 PDF'}
+          <button onClick={() => { if (!isPro) { onNeedPro(); return }; setExporting(true); exportCvPDF(fd, cvName).finally(() => setExporting(false)) }} disabled={exporting} style={{ padding: '11px 14px', borderRadius: 9, background: 'rgba(255,255,255,0.05)', color: C.white, border: `0.5px solid ${C.border2}`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600 }} title={isPro ? undefined : '⭐ Pro'}>
+            {exporting ? '…' : `📄 PDF${isPro ? '' : ' ⭐'}`}
           </button>
-          <button onClick={() => { setExporting(true); exportCvWord(fd, cvName).finally(() => setExporting(false)) }} disabled={exporting} style={{ padding: '11px 14px', borderRadius: 9, background: 'rgba(255,255,255,0.05)', color: C.white, border: `0.5px solid ${C.border2}`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600 }}>
-            {exporting ? '…' : '📝 Word'}
+          <button onClick={() => { if (!isPro) { onNeedPro(); return }; setExporting(true); exportCvWord(fd, cvName).finally(() => setExporting(false)) }} disabled={exporting} style={{ padding: '11px 14px', borderRadius: 9, background: 'rgba(255,255,255,0.05)', color: C.white, border: `0.5px solid ${C.border2}`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600 }} title={isPro ? undefined : '⭐ Pro'}>
+            {exporting ? '…' : `📝 Word${isPro ? '' : ' ⭐'}`}
           </button>
         </div>
       </div>
@@ -1155,7 +1161,7 @@ function CVSection({ profile, isPro }: { profile: UserProfile; isPro: boolean })
                 <div style={{ fontSize: 11, color: C.mid, marginBottom: 10 }}>{CV_DESIGNS.find(d => d.id === cv.design)?.name} · {new Date(cv.updatedAt).toLocaleDateString('de-AT', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   <button onClick={() => openEdit(cv)} style={{ flex: 1, padding: '6px', borderRadius: 7, background: 'rgba(27,46,107,0.3)', color: C.navy3, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600 }}>Bearbeiten</button>
-                  <button onClick={() => { setExporting(true); exportCvPDF(cv.data, cv.name).finally(() => setExporting(false)) }} style={{ padding: '6px 8px', borderRadius: 7, background: 'rgba(255,255,255,0.04)', color: C.mid, border: `0.5px solid ${C.border}`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 }} title="Als PDF exportieren">📄</button>
+                  <button onClick={() => { if (!isPro) { onNeedPro(); return }; setExporting(true); exportCvPDF(cv.data, cv.name).finally(() => setExporting(false)) }} style={{ padding: '6px 8px', borderRadius: 7, background: 'rgba(255,255,255,0.04)', color: C.mid, border: `0.5px solid ${C.border}`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 }} title={isPro ? 'Als PDF exportieren' : '⭐ Pro – PDF Export'}>📄{isPro ? '' : '⭐'}</button>
                   <button onClick={() => duplicateCv(cv)} style={{ padding: '6px 8px', borderRadius: 7, background: 'rgba(255,255,255,0.04)', color: C.mid, border: `0.5px solid ${C.border}`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 }} title="Duplizieren">⧉</button>
                   <button onClick={() => saveCvs(cvs.filter(c => c.id !== cv.id))} style={{ padding: '6px 8px', borderRadius: 7, background: 'rgba(248,113,113,0.08)', color: '#f87171', border: '0.5px solid rgba(248,113,113,0.2)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 }} title="Löschen">🗑</button>
                 </div>
@@ -2209,14 +2215,32 @@ function UpgradeModal({ onClose, onUpgrade }: { onClose: () => void; onUpgrade: 
 }
 
 // ── Main dashboard ────────────────────────────────────────────────────────────
-export default function DashboardClient({ profile, applications, justUpgraded }: Props) {
+export default function DashboardClient({ profile, applications, justUpgraded, upgradeStatus }: Props) {
   const [activeNav, setActiveNav] = useState<NavId>('dashboard')
   const [selectedJob, setSelectedJob] = useState<ReturnType<typeof makeMockJobs>[0] | null>(null)
   const [showUpgrade, setShowUpgrade] = useState(false)
   const [globalSearch, setGlobalSearch] = useState('')
+  const [globalToast, setGlobalToast] = useState<string>('')
   const supabase = createClient()
   const router = useRouter()
   const isPro = !!profile.is_pro
+
+  // Show upgrade/cancel toast from URL param (once)
+  useEffect(() => {
+    if (upgradeStatus === 'success') {
+      setGlobalToast('Willkommen bei Jobbly Pro! 🎉 Alle Features sind jetzt freigeschaltet.')
+      window.history.replaceState({}, '', '/dashboard')
+    } else if (upgradeStatus === 'cancelled') {
+      setGlobalToast('Upgrade abgebrochen — du kannst jederzeit upgraden.')
+      window.history.replaceState({}, '', '/dashboard')
+    }
+  }, [upgradeStatus])
+
+  useEffect(() => {
+    if (!globalToast) return
+    const t = setTimeout(() => setGlobalToast(''), 5000)
+    return () => clearTimeout(t)
+  }, [globalToast])
 
   const mockJobs = useMemo(() => makeMockJobs(), [])
   const showOnboarding = !profile.first_name
@@ -2230,7 +2254,7 @@ export default function DashboardClient({ profile, applications, justUpgraded }:
     switch (activeNav) {
       case 'jobs': return <JobsSection jobs={mockJobs} isPro={isPro} onSelect={j => setSelectedJob(j)} onNeedPro={() => setShowUpgrade(true)} initialSearch={globalSearch} />
       case 'applications': return <ApplicationsSection applications={applications} profile={profile} />
-      case 'cv': return <CVSection profile={profile} isPro={isPro} />
+      case 'cv': return <CVSection profile={profile} isPro={isPro} onNeedPro={() => setShowUpgrade(true)} />
       case 'letter': return <LetterSection profile={profile} isPro={isPro} onNeedPro={() => setShowUpgrade(true)} />
       case 'profile': return <ProfileSection profile={profile} />
       case 'stats': return <StatsSection applications={applications} />
@@ -2339,6 +2363,11 @@ export default function DashboardClient({ profile, applications, justUpgraded }:
 
       {selectedJob && <JobDetailModal job={selectedJob} profile={profile} onClose={() => setSelectedJob(null)} />}
       {showUpgrade && <UpgradeModal onClose={() => setShowUpgrade(false)} onUpgrade={() => setShowUpgrade(false)} />}
+      {globalToast && (
+        <div className="profile-save-toast" style={{ background: upgradeStatus === 'success' ? '#0D2A1A' : '#1a1a2e', color: upgradeStatus === 'success' ? '#4ade80' : '#8892A4', borderColor: upgradeStatus === 'success' ? '#2A6B47' : 'rgba(255,255,255,0.1)', fontSize: 14, maxWidth: 420, textAlign: 'center' }}>
+          {globalToast}
+        </div>
+      )}
     </>
   )
 }
