@@ -202,13 +202,58 @@ const MOCK_NOTIFS = [
 ]
 
 function TopBar({ profile, isPro, onUpgrade, onNav }: { profile: UserProfile; isPro: boolean; onUpgrade: () => void; onNav: (id: NavId) => void }) {
+  const supabase = createClient()
   const [search, setSearch] = useState('')
   const [showPopup, setShowPopup] = useState(false)
   const [showBell, setShowBell] = useState(false)
   const [notifs, setNotifs] = useState(MOCK_NOTIFS)
+  const [notifsLoaded, setNotifsLoaded] = useState(false)
   const bellRef = useRef<HTMLDivElement>(null)
   const initials = (profile.first_name || '?').charAt(0).toUpperCase()
   const unread = notifs.filter(n => !n.read).length
+
+  // Fetch notifications from Supabase; fall back to mock if table doesn't exist
+  useEffect(() => {
+    async function fetchNotifs() {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', profile.id)
+        .order('created_at', { ascending: false })
+        .limit(20)
+      if (!error && data && data.length > 0) {
+        setNotifs(data.map(n => ({
+          id: String(n.id),
+          icon: String(n.icon || '🔔'),
+          title: String(n.title || ''),
+          desc: String(n.description || n.desc || ''),
+          time: new Date(n.created_at).toLocaleDateString('de-AT', { day: 'numeric', month: 'short' }),
+          read: Boolean(n.read),
+        })))
+      }
+      setNotifsLoaded(true)
+    }
+    fetchNotifs()
+  }, [profile.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Real-time: listen for new notifications
+  useEffect(() => {
+    const channel = supabase
+      .channel(`notifs:${profile.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${profile.id}` }, payload => {
+        const n = payload.new as Record<string, unknown>
+        setNotifs(prev => [{
+          id: String(n.id),
+          icon: String(n.icon || '🔔'),
+          title: String(n.title || ''),
+          desc: String(n.description || n.desc || ''),
+          time: 'Gerade eben',
+          read: false,
+        }, ...prev])
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [profile.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -218,8 +263,20 @@ function TopBar({ profile, isPro, onUpgrade, onNav }: { profile: UserProfile; is
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  function markAllRead() { setNotifs(n => n.map(x => ({ ...x, read: true }))) }
-  function markRead(id: string) { setNotifs(n => n.map(x => x.id === id ? { ...x, read: true } : x)) }
+  async function markAllRead() {
+    setNotifs(n => n.map(x => ({ ...x, read: true })))
+    // Update in Supabase if real notifications were loaded
+    if (notifsLoaded) {
+      await supabase.from('notifications').update({ read: true }).eq('user_id', profile.id).eq('read', false)
+    }
+  }
+
+  async function markRead(id: string) {
+    setNotifs(n => n.map(x => x.id === id ? { ...x, read: true } : x))
+    if (notifsLoaded) {
+      await supabase.from('notifications').update({ read: true }).eq('id', id)
+    }
+  }
 
   return (
     <header style={{ height: 60, borderBottom: `0.5px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 16, padding: '0 28px', background: C.bg, flexShrink: 0 }}>
