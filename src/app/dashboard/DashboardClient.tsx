@@ -2216,22 +2216,30 @@ function SettingsSection({ profile, isPro, onUpgrade }: { profile: UserProfile; 
 // ── Courses section ───────────────────────────────────────────────────────────
 function CoursesSection() {
   return (
-    <div style={{ maxWidth: 760 }}>
-      <h2 style={{ fontSize: 22, fontWeight: 700, color: C.white, marginBottom: 8 }}>Karriere Kurse</h2>
-      <p style={{ fontSize: 13, color: C.mid, marginBottom: 24 }}>Lerne die gefragtesten Skills und steigere deine Chancen.</p>
-      {COURSES.map(course => (
-        <div key={course.name} onClick={() => window.open(course.url === '#' ? `https://www.${course.platform.toLowerCase()}.com` : course.url, '_blank')}
-          style={{ display: 'flex', gap: 16, alignItems: 'center', padding: '16px 18px', borderRadius: 12, border: `0.5px solid ${C.border}`, background: 'rgba(255,255,255,0.015)', marginBottom: 10, cursor: 'pointer', transition: 'all .2s' }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(27,46,107,0.5)'; e.currentTarget.style.background = 'rgba(27,46,107,0.05)' }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.background = 'rgba(255,255,255,0.015)' }}>
-          <div style={{ width: 48, height: 48, borderRadius: 10, background: course.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: '#fff', flexShrink: 0 }}>{course.initial}</div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: C.white, marginBottom: 3 }}>{course.name}</div>
-            <div style={{ fontSize: 12, color: C.mid }}>{course.platform} · {course.rating}★ · {course.duration}</div>
+    <div style={{ maxWidth: 680, margin: '0 auto', textAlign: 'center' }}>
+      <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'rgba(27,46,107,0.25)', border: `0.5px solid rgba(147,175,253,0.3)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, margin: '0 auto 24px' }}>🎓</div>
+      <div style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, letterSpacing: 2, color: C.navy3, textTransform: 'uppercase', background: 'rgba(27,46,107,0.2)', border: `0.5px solid rgba(147,175,253,0.25)`, borderRadius: 20, padding: '5px 14px', marginBottom: 20 }}>Demnächst</div>
+      <h2 style={{ fontSize: 28, fontWeight: 700, color: C.white, marginBottom: 12, letterSpacing: '-.5px' }}>Karriere Kurse</h2>
+      <p style={{ fontSize: 15, color: C.mid, lineHeight: 1.7, marginBottom: 36, maxWidth: 480, margin: '0 auto 36px' }}>
+        Wir arbeiten an kuratierten Karriere-Kursen von Top-Plattformen wie Coursera, LinkedIn Learning und Udemy — direkt in Jobbly integriert.
+      </p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 40 }}>
+        {[
+          { icon: '🎯', label: 'Personalisiert', desc: 'Kurse passend zu deinen Skills und Zielen' },
+          { icon: '🏆', label: 'Zertifiziert', desc: 'Anerkannte Zertifikate von Top-Anbietern' },
+          { icon: '⚡', label: 'KI-gestützt', desc: 'KI empfiehlt den besten Lernpfad für dich' },
+        ].map(f => (
+          <div key={f.label} style={{ background: 'rgba(255,255,255,0.02)', border: `0.5px solid ${C.border}`, borderRadius: 12, padding: '20px 16px' }}>
+            <div style={{ fontSize: 24, marginBottom: 10 }}>{f.icon}</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.white, marginBottom: 6 }}>{f.label}</div>
+            <div style={{ fontSize: 12, color: C.mid, lineHeight: 1.6 }}>{f.desc}</div>
           </div>
-          <span style={{ fontSize: 12, color: C.navy3, fontWeight: 500 }}>Kurs starten →</span>
-        </div>
-      ))}
+        ))}
+      </div>
+      <div style={{ background: 'rgba(27,46,107,0.12)', border: `0.5px solid rgba(27,46,107,0.3)`, borderRadius: 12, padding: '18px 24px', display: 'inline-flex', alignItems: 'center', gap: 12, fontSize: 13, color: C.mid }}>
+        <span style={{ fontSize: 16 }}>🔔</span>
+        <span>Wir benachrichtigen dich, sobald Karriere Kurse verfügbar sind.</span>
+      </div>
     </div>
   )
 }

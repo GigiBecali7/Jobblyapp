@@ -2,16 +2,12 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import type { UserProfile, UserData, WritingStyle, Template, Lang, CVData } from '@/lib/types'
-import type { Job } from '@/components/steps/Step4Jobs'
-import { T } from '@/lib/translations'
 
 import Nav from '@/components/Nav'
 import Hero from '@/components/Hero'
-import StepsBar from '@/components/StepsBar'
 import CookieBanner from '@/components/CookieBanner'
 import AuthModal from '@/components/AuthModal'
 import ProModal from '@/components/ProModal'
@@ -19,11 +15,9 @@ import LegalModal from '@/components/LegalModal'
 import Footer from '@/components/Footer'
 import LandingSections from '@/components/LandingSections'
 import Toast, { type ToastType } from '@/components/Toast'
-import Step1Profile from '@/components/steps/Step1Profile'
-import Step2Style from '@/components/steps/Step2Style'
-import Step3Design from '@/components/steps/Step3Design'
-import Step4Jobs from '@/components/steps/Step4Jobs'
-import Step5Result from '@/components/steps/Step5Result'
+
+import type { UserProfile, Lang } from '@/lib/types'
+import { T } from '@/lib/translations'
 
 export default function Home() {
   const supabase = createClient()
@@ -31,31 +25,13 @@ export default function Home() {
 
   const [user, setUser] = useState<UserProfile | null>(null)
   const [lang, setLang] = useState<Lang>('en')
-  const [step, setStep] = useState(1)
-  const [wStyle, setWStyle] = useState<WritingStyle>('balanced')
-  const [template, setTemplate] = useState<Template>('classic')
-  const [userData, setUserData] = useState<UserData>({} as UserData)
-  const [selectedJob, setSelectedJob] = useState<Job | null>(null)
-  const [cvData, setCvData] = useState<CVData | null>(null)
-  const [generating, setGenerating] = useState(false)
-  const [loadMsg, setLoadMsg] = useState('')
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null)
 
   const [authModal, setAuthModal] = useState<{ open: boolean; tab: 'login' | 'register' }>({ open: false, tab: 'login' })
   const [proModal, setProModal] = useState(false)
   const [legalModal, setLegalModal] = useState<{ open: boolean; section: string }>({ open: false, section: 'impressum' })
 
-  const appTopRef = useRef<HTMLDivElement>(null)
   const t = T[lang]
-
-  function showToast(message: string, type: ToastType) {
-    setToast({ message, type })
-  }
-
-  const fetchProfile = useCallback(async (userId: string) => {
-    const { data } = await supabase.from('profiles').select('*').eq('id', userId).single()
-    if (data) setUser(data as UserProfile)
-  }, [supabase])
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user: u } }) => {
@@ -73,67 +49,6 @@ export default function Home() {
     setUser(null)
   }
 
-  function scrollToApp() {
-    appTopRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
-
-  async function handleGenerate() {
-    if (!user) { setAuthModal({ open: true, tab: 'login' }); return }
-    if (!user.is_pro) { setProModal(true); return }
-
-    // Validate inputs
-    try {
-      const vRes = await fetch('/api/validate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ position: userData.position, skills: userData.skills, lastjob: userData.lastjob }),
-      })
-      const vData = await vRes.json()
-      if (!vData.valid) {
-        showToast(vData.reason || 'Please check your inputs and try again.', 'error')
-        return
-      }
-    } catch { /* fail open */ }
-
-    showToast('Looking good! Generating your CV now…', 'success')
-    setStep(5)
-    setGenerating(true)
-    setCvData(null)
-
-    const msgs = t.loadMsgs
-    let mi = 0
-    setLoadMsg(msgs[0])
-    const iv = setInterval(() => {
-      mi++
-      if (mi < msgs.length) setLoadMsg(msgs[mi])
-    }, 2200)
-
-    try {
-      const res = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userData, style: wStyle, lang, selectedJob, template }),
-      })
-      clearInterval(iv)
-      const data = await res.json()
-      if (data.error) { setLoadMsg('Error: ' + data.error); setGenerating(false); return }
-      setCvData(data.cvData)
-    } catch {
-      clearInterval(iv)
-      setLoadMsg('Something went wrong. Please try again.')
-    } finally {
-      setGenerating(false)
-    }
-  }
-
-  function handleStartOver() {
-    setStep(1); setCvData(null); setSelectedJob(null); scrollToApp()
-  }
-
-  function showStep(n: number) { setStep(n); scrollToApp() }
-
-  const isPro = !!user?.is_pro
-
   return (
     <div className="app">
       <CookieBanner onOpenLegal={(s) => setLegalModal({ open: true, section: s })} />
@@ -149,79 +64,19 @@ export default function Home() {
 
       <Hero
         t={t}
-        onCta={scrollToApp}
+        onCta={() => setAuthModal({ open: true, tab: 'register' })}
         onSignIn={() => setAuthModal({ open: true, tab: 'login' })}
       />
 
-      {/* Marketing sections between hero and builder */}
       <LandingSections
-        onCta={scrollToApp}
+        onCta={() => setAuthModal({ open: true, tab: 'register' })}
         onUpgrade={() => {
           if (!user) setAuthModal({ open: true, tab: 'register' })
           else setProModal(true)
         }}
       />
 
-      <div ref={appTopRef}>
-        <StepsBar step={step} t={t} />
-      </div>
-
-      <div className="main">
-        {step === 1 && (
-          <Step1Profile
-            t={t}
-            initialData={userData}
-            onNext={(data) => { setUserData(data); showStep(2) }}
-          />
-        )}
-        {step === 2 && (
-          <Step2Style
-            t={t}
-            selected={wStyle}
-            onSelect={setWStyle}
-            onNext={() => showStep(3)}
-            onBack={() => showStep(1)}
-          />
-        )}
-        {step === 3 && (
-          <Step3Design
-            t={t}
-            selected={template}
-            onSelect={setTemplate}
-            onNext={() => showStep(4)}
-            onBack={() => showStep(2)}
-            isPro={isPro}
-            onNeedPro={() => setProModal(true)}
-          />
-        )}
-        {step === 4 && (
-          <Step4Jobs
-            t={t}
-            userData={userData}
-            selectedJob={selectedJob}
-            onSelect={setSelectedJob}
-            onGenerate={handleGenerate}
-            onBack={() => showStep(3)}
-          />
-        )}
-        {step === 5 && (
-          <Step5Result
-            t={t}
-            loading={generating}
-            loadMsg={loadMsg}
-            cvData={cvData}
-            userData={userData}
-            template={template}
-            onStartOver={handleStartOver}
-            selectedJob={selectedJob}
-            isPro={isPro}
-            onNeedPro={() => setProModal(true)}
-            lang={lang}
-          />
-        )}
-
-        <Footer onOpenLegal={(s) => setLegalModal({ open: true, section: s })} />
-      </div>
+      <Footer onOpenLegal={(s) => setLegalModal({ open: true, section: s })} />
 
       {authModal.open && (
         <AuthModal
