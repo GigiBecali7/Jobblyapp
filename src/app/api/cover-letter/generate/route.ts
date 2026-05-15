@@ -11,15 +11,25 @@ export async function POST(request: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const body = await request.json()
-    const { jobTitle, company, userProfile } = body
+    const { jobTitle, company, userProfile, lang } = body
 
-    const prompt = `Du bist ein professioneller Bewerbungsschreiber. Schreibe ein überzeugendes deutsches Anschreiben.
+    const langInstructions: Record<string, string> = {
+      de: 'Schreibe auf Deutsch.',
+      en: 'Write in English.',
+      tr: 'Türkçe yaz.',
+      es: 'Escribe en español.',
+      fr: 'Écris en français.',
+      pl: 'Pisz po polsku.',
+    }
+    const langNote = langInstructions[lang as string] || langInstructions.de
+
+    const prompt = `Du bist ein professioneller Bewerbungsschreiber. ${langNote}
 
 Stelle: ${jobTitle}
 Unternehmen: ${company}
 Bewerber-Profil: ${userProfile}
 
-Schreibe 3-4 professionelle Absätze auf Deutsch. Kein Kriechertum, keine Floskeln. Direkt, authentisch, überzeugend.
+Schreibe 3-4 professionelle Absätze. Kein Kriechertum, keine Floskeln. Direkt, authentisch, überzeugend.
 Antworte NUR mit dem Anschreiben-Text, ohne Betreff, Anrede oder Grußformel.`
 
     const message = await anthropic.messages.create({

@@ -1,6 +1,7 @@
 'use client'
 import React from 'react'
 import type { CVProps } from './types'
+import { DEFAULT_SECTIONS } from './types'
 
 function InitialsAvatar({ firstName, lastName }: { firstName: string; lastName: string }) {
   const initials = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase()
@@ -24,7 +25,7 @@ function ProgressBar({ label, pct = 80 }: { label: string; pct?: number }) {
   )
 }
 
-export default function ExecutivePhoto({ firstName, lastName, email, phone, city, linkedin, photoUrl, position, profile, experience, education, skills, languages, fontFamily = 'Inter', fontSize = 'medium', lineSpacing = 'normal' }: CVProps) {
+export default function ExecutivePhoto({ firstName, lastName, email, phone, city, linkedin, photoUrl, position, profile, experience, education, skills, languages, fontFamily = 'Inter', fontSize = 'medium', lineSpacing = 'normal', sections }: CVProps) {
   const fsMap = { small: 11, medium: 13, large: 15 }
   const lsMap = { compact: 1.3, normal: 1.5, relaxed: 1.8 }
   const fs = fsMap[fontSize]
@@ -62,27 +63,37 @@ export default function ExecutivePhoto({ firstName, lastName, email, phone, city
         {/* Left */}
         <div style={{ width: '38%', display: 'flex', flexDirection: 'column', gap: 18 }}>
           <div>
-            <div style={{ fontSize: fs, fontWeight: 700, color: '#1B2E6B', textTransform: 'uppercase', letterSpacing: 1, borderBottom: '2px solid #1B2E6B', paddingBottom: 4, marginBottom: 10 }}>Kenntnisse</div>
-            {skills.map((s, i) => <ProgressBar key={i} label={s} pct={Math.max(60, 95 - i * 7)} />)}
+            <div style={{ fontSize: fs, fontWeight: 700, color: '#1B2E6B', textTransform: 'uppercase', letterSpacing: 1, borderBottom: '2px solid #1B2E6B', paddingBottom: 4, marginBottom: 10 }}>{sections?.skills ?? DEFAULT_SECTIONS.skills}</div>
+            {skills.length > 0
+              ? skills.map((s, i) => <ProgressBar key={i} label={s} pct={Math.max(60, 95 - i * 7)} />)
+              : <div style={{ fontSize: fs - 2, color: '#bbb', fontStyle: 'italic' }}>—</div>}
           </div>
           <div>
-            <div style={{ fontSize: fs, fontWeight: 700, color: '#1B2E6B', textTransform: 'uppercase', letterSpacing: 1, borderBottom: '2px solid #1B2E6B', paddingBottom: 4, marginBottom: 8 }}>Sprachen</div>
-            <div style={{ fontSize: fs - 1, color: '#444' }}>{languages}</div>
+            <div style={{ fontSize: fs, fontWeight: 700, color: '#1B2E6B', textTransform: 'uppercase', letterSpacing: 1, borderBottom: '2px solid #1B2E6B', paddingBottom: 4, marginBottom: 8 }}>{sections?.languages ?? DEFAULT_SECTIONS.languages}</div>
+            {languages
+              ? <div style={{ fontSize: fs - 1, color: '#444' }}>{languages}</div>
+              : <div style={{ fontSize: fs - 2, color: '#bbb', fontStyle: 'italic' }}>—</div>}
           </div>
           <div>
-            <div style={{ fontSize: fs, fontWeight: 700, color: '#1B2E6B', textTransform: 'uppercase', letterSpacing: 1, borderBottom: '2px solid #1B2E6B', paddingBottom: 4, marginBottom: 8 }}>Ausbildung</div>
-            <div style={{ fontSize: fs - 1, color: '#444', lineHeight: ls }}>{education}</div>
+            <div style={{ fontSize: fs, fontWeight: 700, color: '#1B2E6B', textTransform: 'uppercase', letterSpacing: 1, borderBottom: '2px solid #1B2E6B', paddingBottom: 4, marginBottom: 8 }}>{sections?.education ?? DEFAULT_SECTIONS.education}</div>
+            {education
+              ? <div style={{ fontSize: fs - 1, color: '#444', lineHeight: ls }}>{education}</div>
+              : <div style={{ fontSize: fs - 2, color: '#bbb', fontStyle: 'italic' }}>—</div>}
           </div>
         </div>
         {/* Right */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 18 }}>
           <div>
-            <div style={{ fontSize: fs, fontWeight: 700, color: '#1B2E6B', textTransform: 'uppercase', letterSpacing: 1, borderBottom: '2px solid #1B2E6B', paddingBottom: 4, marginBottom: 8 }}>Profil</div>
-            <div style={{ fontSize: fs - 1, color: '#444', lineHeight: ls }}>{profile}</div>
+            <div style={{ fontSize: fs, fontWeight: 700, color: '#1B2E6B', textTransform: 'uppercase', letterSpacing: 1, borderBottom: '2px solid #1B2E6B', paddingBottom: 4, marginBottom: 8 }}>{sections?.profile ?? DEFAULT_SECTIONS.profile}</div>
+            {profile
+              ? <div style={{ fontSize: fs - 1, color: '#444', lineHeight: ls }}>{profile}</div>
+              : <div style={{ fontSize: fs - 2, color: '#bbb', fontStyle: 'italic' }}>—</div>}
           </div>
           <div>
-            <div style={{ fontSize: fs, fontWeight: 700, color: '#1B2E6B', textTransform: 'uppercase', letterSpacing: 1, borderBottom: '2px solid #1B2E6B', paddingBottom: 4, marginBottom: 8 }}>Berufserfahrung</div>
-            <div style={{ fontSize: fs - 1, color: '#444', lineHeight: ls, whiteSpace: 'pre-wrap' }}>{experience}</div>
+            <div style={{ fontSize: fs, fontWeight: 700, color: '#1B2E6B', textTransform: 'uppercase', letterSpacing: 1, borderBottom: '2px solid #1B2E6B', paddingBottom: 4, marginBottom: 8 }}>{sections?.experience ?? DEFAULT_SECTIONS.experience}</div>
+            {experience
+              ? <div style={{ fontSize: fs - 1, color: '#444', lineHeight: ls, whiteSpace: 'pre-wrap' }}>{experience}</div>
+              : <div style={{ fontSize: fs - 2, color: '#bbb', fontStyle: 'italic' }}>—</div>}
           </div>
         </div>
       </div>

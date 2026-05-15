@@ -1,6 +1,7 @@
 'use client'
 import React from 'react'
 import type { CVProps } from './types'
+import { DEFAULT_SECTIONS } from './types'
 
 function InitialsAvatar({ firstName, lastName, size = 80 }: { firstName: string; lastName: string; size?: number }) {
   const initials = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase()
@@ -11,7 +12,7 @@ function InitialsAvatar({ firstName, lastName, size = 80 }: { firstName: string;
   )
 }
 
-export default function NordicMinimal({ firstName, lastName, email, phone, city, linkedin, photoUrl, position, profile, experience, education, skills, languages, fontFamily = 'Georgia', fontSize = 'medium', lineSpacing = 'normal' }: CVProps) {
+export default function NordicMinimal({ firstName, lastName, email, phone, city, linkedin, photoUrl, position, profile, experience, education, skills, languages, fontFamily = 'Georgia', fontSize = 'medium', lineSpacing = 'normal', sections }: CVProps) {
   const fsMap = { small: 11, medium: 13, large: 15 }
   const lsMap = { compact: 1.3, normal: 1.5, relaxed: 1.8 }
   const fs = fsMap[fontSize]
@@ -33,40 +34,51 @@ export default function NordicMinimal({ firstName, lastName, email, phone, city,
         </div>
 
         <div>
-          <div style={{ fontSize: fs - 2, fontWeight: 700, color: '#1B2E6B', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Kontakt</div>
+          <div style={{ fontSize: fs - 2, fontWeight: 700, color: '#1B2E6B', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>{sections?.contact ?? DEFAULT_SECTIONS.contact}</div>
           {email && <div style={{ fontSize: fs - 3, color: '#444', marginBottom: 3 }}>{email}</div>}
           {phone && <div style={{ fontSize: fs - 3, color: '#444', marginBottom: 3 }}>{phone}</div>}
           {city && <div style={{ fontSize: fs - 3, color: '#444', marginBottom: 3 }}>{city}</div>}
           {linkedin && <div style={{ fontSize: fs - 3, color: '#444', wordBreak: 'break-all' }}>{linkedin}</div>}
+          {!email && !phone && !city && !linkedin && <div style={{ fontSize: fs - 2, color: '#bbb', fontStyle: 'italic' }}>—</div>}
         </div>
 
         <div>
-          <div style={{ fontSize: fs - 2, fontWeight: 700, color: '#1B2E6B', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Kenntnisse</div>
-          {skills.map((s, i) => <div key={i} style={{ fontSize: fs - 3, color: '#444', marginBottom: 3 }}>– {s}</div>)}
+          <div style={{ fontSize: fs - 2, fontWeight: 700, color: '#1B2E6B', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>{sections?.skills ?? DEFAULT_SECTIONS.skills}</div>
+          {skills.length > 0
+            ? skills.map((s, i) => <div key={i} style={{ fontSize: fs - 3, color: '#444', marginBottom: 3 }}>– {s}</div>)
+            : <div style={{ fontSize: fs - 2, color: '#bbb', fontStyle: 'italic' }}>—</div>}
         </div>
 
         <div>
-          <div style={{ fontSize: fs - 2, fontWeight: 700, color: '#1B2E6B', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Sprachen</div>
-          <div style={{ fontSize: fs - 3, color: '#444' }}>{languages}</div>
+          <div style={{ fontSize: fs - 2, fontWeight: 700, color: '#1B2E6B', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>{sections?.languages ?? DEFAULT_SECTIONS.languages}</div>
+          {languages
+            ? <div style={{ fontSize: fs - 3, color: '#444' }}>{languages}</div>
+            : <div style={{ fontSize: fs - 2, color: '#bbb', fontStyle: 'italic' }}>—</div>}
         </div>
       </div>
 
       {/* Main */}
       <div style={{ flex: 1, padding: '36px 28px', display: 'flex', flexDirection: 'column', gap: 18 }}>
         <div>
-          <div style={{ fontSize: fs, fontWeight: 700, color: '#1B2E6B', fontFamily: 'Georgia', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 }}>Profil</div>
+          <div style={{ fontSize: fs, fontWeight: 700, color: '#1B2E6B', fontFamily: 'Georgia', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 }}>{sections?.profile ?? DEFAULT_SECTIONS.profile}</div>
           <hr style={{ border: 'none', borderTop: '1px solid #1B2E6B', marginBottom: 8 }} />
-          <div style={{ fontSize: fs - 1, color: '#333', lineHeight: ls }}>{profile}</div>
+          {profile
+            ? <div style={{ fontSize: fs - 1, color: '#333', lineHeight: ls }}>{profile}</div>
+            : <div style={{ fontSize: fs - 2, color: '#bbb', fontStyle: 'italic' }}>—</div>}
         </div>
         <div>
-          <div style={{ fontSize: fs, fontWeight: 700, color: '#1B2E6B', fontFamily: 'Georgia', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 }}>Berufserfahrung</div>
+          <div style={{ fontSize: fs, fontWeight: 700, color: '#1B2E6B', fontFamily: 'Georgia', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 }}>{sections?.experience ?? DEFAULT_SECTIONS.experience}</div>
           <hr style={{ border: 'none', borderTop: '1px solid #1B2E6B', marginBottom: 8 }} />
-          <div style={{ fontSize: fs - 1, color: '#333', lineHeight: ls, whiteSpace: 'pre-wrap' }}>{experience}</div>
+          {experience
+            ? <div style={{ fontSize: fs - 1, color: '#333', lineHeight: ls, whiteSpace: 'pre-wrap' }}>{experience}</div>
+            : <div style={{ fontSize: fs - 2, color: '#bbb', fontStyle: 'italic' }}>—</div>}
         </div>
         <div>
-          <div style={{ fontSize: fs, fontWeight: 700, color: '#1B2E6B', fontFamily: 'Georgia', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 }}>Ausbildung</div>
+          <div style={{ fontSize: fs, fontWeight: 700, color: '#1B2E6B', fontFamily: 'Georgia', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 }}>{sections?.education ?? DEFAULT_SECTIONS.education}</div>
           <hr style={{ border: 'none', borderTop: '1px solid #1B2E6B', marginBottom: 8 }} />
-          <div style={{ fontSize: fs - 1, color: '#333', lineHeight: ls }}>{education}</div>
+          {education
+            ? <div style={{ fontSize: fs - 1, color: '#333', lineHeight: ls }}>{education}</div>
+            : <div style={{ fontSize: fs - 2, color: '#bbb', fontStyle: 'italic' }}>—</div>}
         </div>
       </div>
     </div>
