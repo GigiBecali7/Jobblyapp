@@ -33,7 +33,7 @@ Schreibe 3-4 professionelle Absätze. Kein Kriechertum, keine Floskeln. Direkt, 
 Antworte NUR mit dem Anschreiben-Text, ohne Betreff, Anrede oder Grußformel.`
 
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 800,
       messages: [{ role: 'user', content: prompt }],
     })
@@ -42,7 +42,8 @@ Antworte NUR mit dem Anschreiben-Text, ohne Betreff, Anrede oder Grußformel.`
 
     return NextResponse.json({ coverLetter: text.trim() })
   } catch (error) {
-    console.error('Cover letter generate error:', error)
-    return NextResponse.json({ error: 'Generation failed' }, { status: 500 })
+    const msg = error instanceof Error ? error.message : String(error)
+    console.error('Cover letter generate error:', msg)
+    return NextResponse.json({ error: 'Generation failed', detail: msg }, { status: 500 })
   }
 }

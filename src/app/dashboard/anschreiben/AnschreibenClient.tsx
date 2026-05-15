@@ -171,8 +171,8 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
       })
       const json = await res.json()
       if (json.coverLetter) { setEditableText(json.coverLetter); setView('preview') }
-      else showToast(t.toastGenerateError, false)
-    } catch { showToast(t.toastGenerateError, false) }
+      else { console.error('Generate error detail:', json.detail || json.error); showToast(t.toastGenerateError, false) }
+    } catch (e) { console.error('Generate fetch error:', e); showToast(t.toastGenerateError, false) }
     finally { setGenerating(false) }
   }
 
