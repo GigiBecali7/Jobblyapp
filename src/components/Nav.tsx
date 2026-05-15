@@ -17,7 +17,7 @@ interface Props {
 export default function Nav({ lang, onLangChange, user, onSignIn, onRegister, onLogout }: Props) {
   return (
     <div className="nav">
-      <JLogo size={28} />
+      <JLogo size={28} href={user ? '/dashboard' : '/'} />
 
       <div className="nav-right">
         <select className="lang-sel" value={lang} onChange={(e) => onLangChange(e.target.value as Lang)}>

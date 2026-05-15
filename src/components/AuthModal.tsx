@@ -19,6 +19,7 @@ export default function AuthModal({ initialTab = 'login', onClose, onSuccess }: 
   // Login fields
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [rememberMe, setRememberMe] = useState(true)
 
   // Register fields
   const [regFn, setRegFn] = useState('')
@@ -40,6 +41,9 @@ export default function AuthModal({ initialTab = 'login', onClose, onSuccess }: 
     const { error: err } = await supabase.auth.signInWithPassword({ email, password })
 
     setLoading(false)
+    if (!err && !rememberMe) {
+      window.addEventListener('beforeunload', () => { supabase.auth.signOut() }, { once: true })
+    }
     if (err) {
       if (err.message.includes('Email not confirmed')) {
         setError('Please verify your email first. Check your inbox.')
@@ -138,7 +142,19 @@ export default function AuthModal({ initialTab = 'login', onClose, onSuccess }: 
               <label>Password</label>
               <input type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
-            <button className="btn" type="submit" style={{ marginTop: '.5rem' }} disabled={loading}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '.5rem 0' }}>
+              <input
+                type="checkbox"
+                id="remember-me"
+                checked={rememberMe}
+                onChange={e => setRememberMe(e.target.checked)}
+                style={{ width: 14, height: 14, cursor: 'pointer', accentColor: '#1B2E6B' }}
+              />
+              <label htmlFor="remember-me" style={{ fontSize: 13, color: 'var(--mid)', cursor: 'pointer', userSelect: 'none' }}>
+                Angemeldet bleiben
+              </label>
+            </div>
+            <button className="btn" type="submit" style={{ marginTop: '.25rem' }} disabled={loading}>
               {loading ? 'Signing in...' : 'Sign in'}
             </button>
             <p style={{ fontSize: 12, color: 'var(--mid)', textAlign: 'center', marginTop: '.75rem' }}>

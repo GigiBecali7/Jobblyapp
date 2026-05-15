@@ -139,7 +139,8 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
   async function handleExportPDF() {
     setExporting(true)
     try {
-      await exportToPDF('cv-preview-area', `lebenslauf-${cvData.lastName || 'export'}.pdf`)
+      // Use the hidden offscreen render (no parent scale transform) for pixel-perfect PDF
+      await exportToPDF('cv-pdf-capture', `lebenslauf-${cvData.lastName || 'export'}.pdf`)
     } catch {
       showToast('PDF-Export fehlgeschlagen.')
     } finally {
@@ -168,6 +169,12 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f8f9fa', fontFamily: 'Inter, sans-serif' }}>
+      {/* Hidden offscreen render for pixel-perfect PDF export — no scaling applied */}
+      <div style={{ position: 'fixed', left: -9999, top: 0, width: 794, height: 1123, zIndex: -1, overflow: 'hidden', pointerEvents: 'none' }}>
+        <div id="cv-pdf-capture">
+          <CVRenderer design={selectedDesign} cvProps={currentCvProps} />
+        </div>
+      </div>
       {toast && (
         <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 9999, backgroundColor: '#1B2E6B', color: '#fff', padding: '12px 20px', borderRadius: 8, fontSize: 14 }}>
           {toast}
@@ -199,13 +206,40 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 32 }}>
               {DESIGNS.map(d => {
                 const locked = d.proOnly && !isPro
+                const isSelected = selectedDesign === d.id
                 return (
-                  <div key={d.id} onClick={() => !locked && setSelectedDesign(d.id)} style={{ border: `2px solid ${selectedDesign === d.id ? d.color : '#e9ecef'}`, borderRadius: 12, padding: 20, cursor: locked ? 'not-allowed' : 'pointer', position: 'relative', backgroundColor: locked ? '#fafafa' : '#fff', opacity: locked ? 0.7 : 1, transition: 'all 0.2s' }}>
-                    {locked && <div style={{ position: 'absolute', top: 10, right: 10, backgroundColor: '#f59e0b', color: '#fff', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20 }}>PRO</div>}
-                    <div style={{ width: 40, height: 40, borderRadius: 8, backgroundColor: d.color, marginBottom: 12 }} />
+                  <div
+                    key={d.id}
+                    onClick={() => {
+                      if (locked) {
+                        showToast('Dieses Design ist nur für Pro-Nutzer verfügbar. Upgrade jetzt!')
+                        return
+                      }
+                      setSelectedDesign(d.id)
+                    }}
+                    style={{
+                      border: `2px solid ${isSelected ? d.color : locked ? '#e9ecef' : '#e9ecef'}`,
+                      borderRadius: 12, padding: 20, cursor: locked ? 'pointer' : 'pointer',
+                      position: 'relative', backgroundColor: locked ? '#f9f9f9' : '#fff',
+                      transition: 'all 0.2s', boxShadow: isSelected ? `0 0 0 3px ${d.color}22` : 'none',
+                    }}
+                  >
+                    {locked && (
+                      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.7)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, zIndex: 1 }}>
+                        <span style={{ fontSize: 24 }}>🔒</span>
+                        <span style={{ backgroundColor: '#f59e0b', color: '#fff', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>PRO</span>
+                      </div>
+                    )}
+                    <div style={{ width: 48, height: 48, borderRadius: 10, backgroundColor: d.color, marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span style={{ color: '#fff', fontSize: 20 }}>
+                        {d.id === 'NordicMinimal' ? '📋' : d.id === 'NordicSidebar' ? '🌿' : d.id === 'ModernSplit' ? '✨' : d.id === 'DarkPro' ? '🌙' : d.id === 'ExecutivePhoto' ? '📸' : '⬛'}
+                      </span>
+                    </div>
                     <div style={{ fontWeight: 700, fontSize: 15, color: '#1a1a1a' }}>{d.label}</div>
                     <div style={{ fontSize: 13, color: '#666', marginTop: 4 }}>{d.desc}</div>
-                    {selectedDesign === d.id && !locked && <div style={{ marginTop: 8, fontSize: 12, color: d.color, fontWeight: 600 }}>✓ Ausgewählt</div>}
+                    {isSelected && !locked && (
+                      <div style={{ marginTop: 8, fontSize: 12, color: d.color, fontWeight: 600 }}>✓ Ausgewählt</div>
+                    )}
                   </div>
                 )
               })}

@@ -156,10 +156,18 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
               </div>
             )}
             {letters.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '60px 20px', color: '#999' }}>
-                <div style={{ fontSize: 48, marginBottom: 16 }}>📝</div>
-                <div style={{ fontSize: 18, fontWeight: 600, color: '#444', marginBottom: 8 }}>Noch kein Anschreiben</div>
-                <div style={{ fontSize: 14 }}>Erstelle dein erstes professionelles Anschreiben mit KI.</div>
+              <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+                <div style={{ fontSize: 56, marginBottom: 16 }}>✉️</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: '#1a1a1a', marginBottom: 8 }}>Dein KI-Anschreiben wartet</div>
+                <div style={{ fontSize: 14, color: '#666', marginBottom: 28, maxWidth: 380, margin: '0 auto 28px' }}>
+                  Wähle eine Stelle aus und lass die KI ein professionelles deutsches Anschreiben für dich erstellen — in unter 30 Sekunden.
+                </div>
+                <button
+                  onClick={() => { setView('create'); setJobTitle(''); setCompany(''); setGeneratedText('') }}
+                  style={{ backgroundColor: '#1B2E6B', color: '#fff', border: 'none', borderRadius: 10, padding: '14px 28px', fontSize: 15, fontWeight: 600, cursor: 'pointer' }}
+                >
+                  ✨ Erstes Anschreiben erstellen
+                </button>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -226,16 +234,51 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
 
             {/* A4 Preview */}
             <div style={{ display: 'flex', justifyContent: 'center' }}>
-              <div id="cover-letter-preview" style={{ width: 794, minHeight: 1123, backgroundColor: '#fff', padding: '60px 70px', boxSizing: 'border-box', boxShadow: '0 8px 40px rgba(0,0,0,0.15)', fontFamily: 'Georgia, serif' }}>
-                <div style={{ borderTop: '4px solid #1B2E6B', paddingTop: 32, marginBottom: 32 }}>
-                  <div style={{ fontSize: 22, fontWeight: 700, color: '#1B2E6B' }}>{profile?.first_name as string || ''} {profile?.last_name as string || ''}</div>
-                  <div style={{ fontSize: 14, color: '#666', marginTop: 4 }}>{profile?.email as string || ''}</div>
+              <div id="cover-letter-preview" style={{ width: 794, minHeight: 1123, backgroundColor: '#fff', boxSizing: 'border-box', boxShadow: '0 8px 40px rgba(0,0,0,0.15)', fontFamily: 'Georgia, serif', overflow: 'hidden' }}>
+                {/* Styled header matching CV design */}
+                <div style={{ backgroundColor: '#1B2E6B', padding: '32px 56px 24px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                    <div>
+                      <div style={{ fontSize: 26, fontWeight: 800, color: '#fff', letterSpacing: '-.5px' }}>
+                        {profile?.first_name as string || ''} {profile?.last_name as string || ''}
+                      </div>
+                      <div style={{ fontSize: 13, color: '#93AFFD', marginTop: 6, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                        {profile?.email ? <span>✉ {String(profile.email)}</span> : null}
+                      </div>
+                    </div>
+                    <div style={{ width: 52, height: 52, borderRadius: '50%', backgroundColor: '#93AFFD', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700, color: '#1B2E6B', flexShrink: 0 }}>
+                      {String(profile?.first_name || '?').charAt(0)}{String(profile?.last_name || '').charAt(0)}
+                    </div>
+                  </div>
                 </div>
-                <div style={{ marginBottom: 24 }}>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a1a', marginBottom: 4 }}>Bewerbung als {jobTitle}</div>
-                  <div style={{ fontSize: 14, color: '#444' }}>bei {company}</div>
+
+                {/* Letter body */}
+                <div style={{ padding: '40px 56px' }}>
+                  {/* Date + recipient */}
+                  <div style={{ marginBottom: 32, fontSize: 13, color: '#666' }}>
+                    <div>{new Date().toLocaleDateString('de-AT', { day: 'numeric', month: 'long', year: 'numeric' })}</div>
+                    <div style={{ marginTop: 16, fontWeight: 600, color: '#1a1a1a' }}>{company}</div>
+                  </div>
+
+                  {/* Subject */}
+                  <div style={{ marginBottom: 28, paddingBottom: 16, borderBottom: '1px solid #e9ecef' }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: '#1B2E6B' }}>
+                      Bewerbung als {jobTitle} bei {company}
+                    </div>
+                  </div>
+
+                  {/* Salutation */}
+                  <div style={{ fontSize: 14, color: '#333', marginBottom: 20 }}>Sehr geehrte Damen und Herren,</div>
+
+                  {/* Body */}
+                  <div style={{ fontSize: 14, color: '#333', lineHeight: 1.8, whiteSpace: 'pre-wrap', marginBottom: 32 }}>{generatedText}</div>
+
+                  {/* Closing */}
+                  <div style={{ fontSize: 14, color: '#333', marginBottom: 8 }}>Mit freundlichen Grüßen,</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: '#1B2E6B', marginTop: 24 }}>
+                    {profile?.first_name as string || ''} {profile?.last_name as string || ''}
+                  </div>
                 </div>
-                <div style={{ fontSize: 15, color: '#333', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{generatedText}</div>
               </div>
             </div>
           </div>

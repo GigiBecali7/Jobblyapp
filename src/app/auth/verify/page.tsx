@@ -1,10 +1,13 @@
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 
-export default function VerifyPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ error?: string }>
-}) {
+export default async function VerifyPage() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (user) redirect('/dashboard')
+
   return (
     <div className="app">
       <div className="nav">
@@ -23,19 +26,19 @@ export default function VerifyPage({
       <div className="verify-box">
         <div style={{ fontSize: 48, marginBottom: '1rem' }}>📧</div>
         <div style={{ fontSize: 20, fontWeight: 600, color: '#fff', marginBottom: '.5rem' }}>
-          Check your inbox
+          E-Mail bestätigen
         </div>
         <p style={{ fontSize: 14, color: 'var(--mid)', lineHeight: 1.7, maxWidth: 380, margin: '0 auto 1.5rem' }}>
-          We&apos;ve sent you a verification email. Click the link in the email to activate your account.
-          The link expires in 24 hours.
+          Wir haben dir einen Bestätigungslink per E-Mail gesendet. Klicke auf den Link, um dein Konto zu aktivieren.
+          Der Link ist 24 Stunden gültig.
         </p>
         <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)', marginBottom: '1.5rem' }}>
-          Didn&apos;t receive it? Check your spam folder or{' '}
-          <Link href="/" style={{ color: 'var(--navy3)' }}>try again</Link>.
+          Keine E-Mail erhalten? Prüfe deinen Spam-Ordner oder{' '}
+          <Link href="/" style={{ color: 'var(--navy3)' }}>versuche es erneut</Link>.
         </p>
         <Link href="/">
           <button className="btn" style={{ maxWidth: 200, margin: '0 auto', display: 'block' }}>
-            Back to home
+            Zurück zur Startseite
           </button>
         </Link>
       </div>

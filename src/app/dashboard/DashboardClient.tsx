@@ -545,6 +545,57 @@ function JobDetailModal({ job, profile, onClose }: { job: ReturnType<typeof make
 }
 
 // ── Right Sidebar ─────────────────────────────────────────────────────────────
+function ProfileCompleteness({ profile, onNav }: { profile: UserProfile; onNav: (id: NavId) => void }) {
+  const p = profile as UserProfile & Record<string, unknown>
+  const fields: { key: string; label: string; val: unknown }[] = [
+    { key: 'first_name', label: 'Vorname', val: profile.first_name },
+    { key: 'last_name', label: 'Nachname', val: profile.last_name },
+    { key: 'photo', label: 'Profilfoto', val: p.photo },
+    { key: 'position', label: 'Position', val: p.position },
+    { key: 'industry', label: 'Branche', val: p.industry },
+    { key: 'experience', label: 'Berufserfahrung', val: p.experience },
+    { key: 'education', label: 'Ausbildung', val: p.education },
+    { key: 'skills', label: 'Kenntnisse', val: p.skills },
+    { key: 'languages', label: 'Sprachen', val: p.languages },
+    { key: 'city', label: 'Wohnort', val: p.city },
+  ]
+  const filled = fields.filter(f => f.val && String(f.val).trim()).length
+  const pct = Math.round((filled / fields.length) * 100)
+  const missing = fields.filter(f => !f.val || !String(f.val).trim()).slice(0, 2)
+
+  return (
+    <section style={{ marginBottom: 28 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: C.white }}>Profil-Vollständigkeit</div>
+        <span style={{ fontSize: 13, fontWeight: 700, color: pct >= 80 ? C.success : C.amber }}>{pct}%</span>
+      </div>
+      <div style={{ height: 6, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 4, marginBottom: 8, overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${pct}%`, backgroundColor: pct >= 80 ? C.success : pct >= 50 ? C.amber : '#f87171', borderRadius: 4, transition: 'width .5s ease' }} />
+      </div>
+      {pct < 80 && (
+        <>
+          {missing.map(m => (
+            <div key={m.key} style={{ fontSize: 11, color: C.mid, marginBottom: 4, display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+              <span style={{ color: C.amber, flexShrink: 0 }}>⚠</span>
+              <span>Füge dein{m.key === 'photo' ? ' ' : 'e '}
+                <span style={{ color: C.navy3 }}>{m.label}</span> hinzu für bessere Job-Matches
+              </span>
+            </div>
+          ))}
+          <button onClick={() => onNav('profile')} style={{ marginTop: 8, width: '100%', padding: '7px', borderRadius: 8, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600 }}>
+            Profil vervollständigen →
+          </button>
+        </>
+      )}
+      {pct >= 80 && (
+        <div style={{ fontSize: 11, color: C.success, display: 'flex', gap: 5, alignItems: 'center' }}>
+          <span>✓</span> Dein Profil ist gut aufgestellt
+        </div>
+      )}
+    </section>
+  )
+}
+
 function RightSidebar({ applications, profile, onNav }: { applications: Application[]; profile: UserProfile; onNav: (id: NavId) => void }) {
   const supabase = createClient()
   const p = profile as UserProfile & Record<string, unknown>
@@ -575,6 +626,7 @@ function RightSidebar({ applications, profile, onNav }: { applications: Applicat
 
   return (
     <aside style={{ width: 288, flexShrink: 0, borderLeft: `0.5px solid ${C.border}`, padding: '24px 20px', overflowY: 'auto', background: C.bg }}>
+      <ProfileCompleteness profile={profile} onNav={onNav} />
       <section style={{ marginBottom: 28 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: C.white }}>Wunschgehalt</div>
@@ -770,10 +822,14 @@ function ApplicationsSection({ applications, profile }: { applications: Applicat
           <button onClick={() => setShowAdd(true)} style={{ padding: '8px 16px', borderRadius: 9, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600 }}>+ Neue Bewerbung</button>
         </div>
         <div style={{ textAlign: 'center', padding: '4rem 2rem', border: `0.5px solid ${C.border}`, borderRadius: 16, background: 'rgba(255,255,255,0.01)' }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>📋</div>
-          <div style={{ fontSize: 16, fontWeight: 600, color: C.white, marginBottom: 8 }}>Noch keine Bewerbungen</div>
-          <p style={{ fontSize: 13, color: C.mid, marginBottom: 24, lineHeight: 1.6 }}>Du hast noch keine Bewerbungen gesendet. Finde passende Jobs und bewirb dich mit einem Klick.</p>
-          <button onClick={() => setShowAdd(true)} style={{ padding: '10px 20px', borderRadius: 10, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 600 }}>+ Neue Bewerbung hinzufügen</button>
+          <div style={{ fontSize: 56, marginBottom: 16 }}>🚀</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: C.white, marginBottom: 8 }}>Noch keine Bewerbungen — finde deinen Traumjob!</div>
+          <p style={{ fontSize: 13, color: C.mid, marginBottom: 28, lineHeight: 1.6, maxWidth: 400, margin: '0 auto 28px' }}>
+            Durchsuche hunderte Jobs und bewirb dich mit einem Klick. Jobbly erstellt dein Anschreiben automatisch mit KI.
+          </p>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button onClick={() => { /* use parent onNav */ setShowAdd(true) }} style={{ padding: '11px 22px', borderRadius: 10, background: `rgba(255,255,255,0.06)`, color: C.white, border: `0.5px solid ${C.border}`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600 }}>+ Manuell hinzufügen</button>
+          </div>
         </div>
       </div>
     )
@@ -2250,12 +2306,18 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
     router.push('/')
   }
 
+  function handleNav(id: NavId) {
+    if (id === 'cv') { router.push('/dashboard/lebenslauf'); return }
+    if (id === 'letter') { router.push('/dashboard/anschreiben'); return }
+    setActiveNav(id)
+  }
+
   function renderContent() {
     switch (activeNav) {
       case 'jobs': return <JobsSection jobs={mockJobs} isPro={isPro} onSelect={j => setSelectedJob(j)} onNeedPro={() => setShowUpgrade(true)} initialSearch={globalSearch} />
       case 'applications': return <ApplicationsSection applications={applications} profile={profile} />
-      case 'cv': return <CVSection profile={profile} isPro={isPro} onNeedPro={() => setShowUpgrade(true)} />
-      case 'letter': return <LetterSection profile={profile} isPro={isPro} onNeedPro={() => setShowUpgrade(true)} />
+      case 'cv': { router.push('/dashboard/lebenslauf'); return null }
+      case 'letter': { router.push('/dashboard/anschreiben'); return null }
       case 'profile': return <ProfileSection profile={profile} />
       case 'stats': return <StatsSection applications={applications} />
       case 'courses': return <CoursesSection />
@@ -2279,14 +2341,14 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
               </p>
             </div>
             <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-              <button onClick={() => setActiveNav('cv')} title="Lebenslauf erstellen"
+              <button onClick={() => router.push('/dashboard/lebenslauf')} title="Lebenslauf erstellen"
                 style={{ width: 56, height: 56, borderRadius: 14, background: 'rgba(27,46,107,0.18)', border: `0.5px solid rgba(27,46,107,0.35)`, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, transition: 'all .15s' }}
                 onMouseEnter={e => { e.currentTarget.style.background = 'rgba(27,46,107,0.35)'; e.currentTarget.style.borderColor = C.navy2 }}
                 onMouseLeave={e => { e.currentTarget.style.background = 'rgba(27,46,107,0.18)'; e.currentTarget.style.borderColor = 'rgba(27,46,107,0.35)' }}>
                 <span style={{ fontSize: 22 }}>📄</span>
                 <span style={{ fontSize: 9, color: C.mid, fontWeight: 500, letterSpacing: '.04em' }}>CV</span>
               </button>
-              <button onClick={() => setActiveNav('letter')} title="Anschreiben erstellen"
+              <button onClick={() => router.push('/dashboard/anschreiben')} title="Anschreiben erstellen"
                 style={{ width: 56, height: 56, borderRadius: 14, background: 'rgba(99,102,241,0.12)', border: `0.5px solid rgba(99,102,241,0.25)`, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, transition: 'all .15s' }}
                 onMouseEnter={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.25)'; e.currentTarget.style.borderColor = 'rgba(99,102,241,0.5)' }}
                 onMouseLeave={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.12)'; e.currentTarget.style.borderColor = 'rgba(99,102,241,0.25)' }}>
@@ -2333,7 +2395,7 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
               <div style={{ fontSize: 14, fontWeight: 700, color: C.white, marginBottom: 3 }}>KI Anschreiben erstellen</div>
               <div style={{ fontSize: 12, color: C.mid }}>Individuelles Anschreiben, perfekt auf den Job zugeschnitten.</div>
             </div>
-            <button onClick={() => setActiveNav('letter')} style={{ padding: '9px 18px', borderRadius: 9, background: `linear-gradient(135deg, ${C.purple}, ${C.purple2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>
+            <button onClick={() => router.push('/dashboard/anschreiben')} style={{ padding: '9px 18px', borderRadius: 9, background: `linear-gradient(135deg, ${C.purple}, ${C.purple2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>
               Jetzt erstellen →
             </button>
           </div>
@@ -2347,16 +2409,16 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
       {showOnboarding && <Onboarding profile={profile} onComplete={() => router.refresh()} />}
 
       <div style={{ display: 'flex', height: '100vh', background: C.bg, overflow: 'hidden' }}>
-        <Sidebar active={activeNav} onNav={setActiveNav} profile={profile} isPro={isPro} onUpgrade={() => setShowUpgrade(true)} onLogout={handleLogout} />
+        <Sidebar active={activeNav} onNav={handleNav} profile={profile} isPro={isPro} onUpgrade={() => setShowUpgrade(true)} onLogout={handleLogout} />
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-          <TopBar profile={profile} isPro={isPro} onUpgrade={() => setShowUpgrade(true)} onNav={setActiveNav} onSearch={term => { setGlobalSearch(term); setActiveNav('jobs') }} />
+          <TopBar profile={profile} isPro={isPro} onUpgrade={() => setShowUpgrade(true)} onNav={handleNav} onSearch={term => { setGlobalSearch(term); setActiveNav('jobs') }} />
 
           <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
             <main style={{ flex: 1, overflowY: 'auto', padding: '28px 32px' }}>
               {renderContent()}
             </main>
-            {activeNav === 'dashboard' && <RightSidebar applications={applications} profile={profile} onNav={setActiveNav} />}
+            {activeNav === 'dashboard' && <RightSidebar applications={applications} profile={profile} onNav={handleNav} />}
           </div>
         </div>
       </div>
