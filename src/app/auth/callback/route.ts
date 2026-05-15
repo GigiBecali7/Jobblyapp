@@ -41,10 +41,16 @@ export async function GET(request: NextRequest) {
     await supabase.from('profiles').upsert({
       id: user.id,
       email: user.email,
-      first_name: user.user_metadata?.first_name || '',
-      last_name: user.user_metadata?.last_name || '',
+      first_name: user.user_metadata?.full_name?.split(' ')[0] || user.user_metadata?.first_name || '',
+      last_name: user.user_metadata?.full_name?.split(' ').slice(1).join(' ') || user.user_metadata?.last_name || '',
       is_pro: false,
     }, { onConflict: 'id', ignoreDuplicates: true })
+
+    // OAuth users (Google etc.) always go directly to dashboard — never to verify page
+    const isOAuth = user.app_metadata?.provider && user.app_metadata.provider !== 'email'
+    if (isOAuth) {
+      return NextResponse.redirect(`${appUrl}/dashboard`)
+    }
   }
 
   return NextResponse.redirect(`${appUrl}${next}`)

@@ -4,9 +4,9 @@ import { useState, useRef, useCallback } from 'react'
 import type { CVData, UserData, Template } from '@/lib/types'
 import type { Translation } from '@/lib/translations'
 import type { Job } from '@/components/steps/Step4Jobs'
-import NordicTemplate from '@/components/cv/NordicTemplate'
-import MonoTemplate from '@/components/cv/MonoTemplate'
-import SplitTemplate from '@/components/cv/SplitTemplate'
+import NordicSidebar from '@/components/cv/NordicSidebar'
+import MonoElegant from '@/components/cv/MonoElegant'
+import ModernSplit from '@/components/cv/ModernSplit'
 
 interface Props {
   t: Translation
@@ -207,9 +207,33 @@ export default function Step5Result({
 
       {/* CV preview — ref'd for PDF export */}
       <div ref={cvRef} style={{ margin: '0 1.5rem', borderRadius: isPremium ? 8 : 10, overflow: 'hidden', border: '0.5px solid rgba(255,255,255,0.08)' }}>
-        {template === 'nordic' && <NordicTemplate cvData={active} userData={userData} />}
-        {template === 'mono'   && <MonoTemplate   cvData={active} userData={userData} />}
-        {template === 'split'  && <SplitTemplate  cvData={active} userData={userData} />}
+        {template === 'nordic' && <NordicSidebar
+          firstName={userData.fname} lastName={userData.lname}
+          email={userData.email} phone={userData.phone} city={userData.city}
+          linkedin={userData.linkedin} photoUrl={userData.photo}
+          position={userData.position} profile={active.profil}
+          experience={active.erfahrung} education={active.ausbildung || userData.education}
+          skills={Array.isArray(active.skills) ? active.skills : String(active.skills || '').split(',').filter(Boolean)}
+          languages={active.sprachen || userData.languages}
+        />}
+        {template === 'mono' && <MonoElegant
+          firstName={userData.fname} lastName={userData.lname}
+          email={userData.email} phone={userData.phone} city={userData.city}
+          linkedin={userData.linkedin} photoUrl={userData.photo}
+          position={userData.position} profile={active.profil}
+          experience={active.erfahrung} education={active.ausbildung || userData.education}
+          skills={Array.isArray(active.skills) ? active.skills : String(active.skills || '').split(',').filter(Boolean)}
+          languages={active.sprachen || userData.languages}
+        />}
+        {template === 'split' && <ModernSplit
+          firstName={userData.fname} lastName={userData.lname}
+          email={userData.email} phone={userData.phone} city={userData.city}
+          linkedin={userData.linkedin} photoUrl={userData.photo}
+          position={userData.position} profile={active.profil}
+          experience={active.erfahrung} education={active.ausbildung || userData.education}
+          skills={Array.isArray(active.skills) ? active.skills : String(active.skills || '').split(',').filter(Boolean)}
+          languages={active.sprachen || userData.languages}
+        />}
         {!isPremium && (
           <>
             <div style={{ background: c.hbg, padding: '1.25rem', borderBottom: '2px solid rgba(27,46,107,0.25)' }}>
