@@ -36,21 +36,30 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${appUrl}/auth/verify?error=invalid_link`)
   }
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (user) {
-    await supabase.from('profiles').upsert({
-      id: user.id,
-      email: user.email,
-      first_name: user.user_metadata?.full_name?.split(' ')[0] || user.user_metadata?.first_name || '',
-      last_name: user.user_metadata?.full_name?.split(' ').slice(1).join(' ') || user.user_metadata?.last_name || '',
-      is_pro: false,
-    }, { onConflict: 'id', ignoreDuplicates: true })
+  // Always get user from the server-verified session — never trust client state
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
+  if (userError || !user) {
+    console.error('Auth callback: could not verify user after code exchange', userError?.message)
+    return NextResponse.redirect(`${appUrl}/auth/verify?error=invalid_link`)
+  }
 
-    // OAuth users (Google etc.) always go directly to dashboard — never to verify page
-    const isOAuth = user.app_metadata?.provider && user.app_metadata.provider !== 'email'
-    if (isOAuth) {
-      return NextResponse.redirect(`${appUrl}/dashboard`)
-    }
+  const isOAuth = user.app_metadata?.provider && user.app_metadata.provider !== 'email'
+  const meta = user.user_metadata || {}
+
+  // Seed profile for new users; ignoreDuplicates=true preserves existing user-edited data
+  await supabase.from('profiles').upsert({
+    id: user.id,
+    email: user.email,
+    first_name: meta.full_name?.split(' ')[0] || meta.given_name || meta.first_name || '',
+    last_name: meta.full_name?.split(' ').slice(1).join(' ') || meta.family_name || meta.last_name || '',
+    // Capture Google/OAuth avatar for new users (ignored on conflict by ignoreDuplicates)
+    avatar_url: meta.avatar_url || meta.picture || null,
+    is_pro: false,
+  }, { onConflict: 'id', ignoreDuplicates: true })
+
+  // OAuth users (Google etc.) go directly to dashboard
+  if (isOAuth) {
+    return NextResponse.redirect(`${appUrl}/dashboard`)
   }
 
   return NextResponse.redirect(`${appUrl}${next}`)

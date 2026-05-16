@@ -3,7 +3,6 @@
 export const dynamic = 'force-dynamic'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
 import Nav from '@/components/Nav'
@@ -21,7 +20,6 @@ import { T } from '@/lib/translations'
 
 export default function Home() {
   const supabase = createClient()
-  const router = useRouter()
 
   const [user, setUser] = useState<UserProfile | null>(null)
   const [lang, setLang] = useState<Lang>('en')
@@ -34,15 +32,24 @@ export default function Home() {
   const t = T[lang]
 
   useEffect(() => {
+    // Read current auth state once to show/hide the "Zum Dashboard" button — never auto-redirect
     supabase.auth.getUser().then(({ data: { user: u } }) => {
-      if (u) { router.replace('/dashboard'); return }
+      if (u) {
+        supabase.from('profiles').select('*').eq('id', u.id).single().then(({ data }) => {
+          setUser((data || { id: u.id, email: u.email || '', first_name: '', last_name: '', is_pro: false, stripe_customer_id: null, stripe_subscription_id: null, created_at: '' }) as UserProfile)
+        })
+      }
     })
+
+    // Listen for auth changes to update the button — but NEVER redirect automatically
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) { router.replace('/dashboard'); return }
-      else setUser(null)
+      if (!session) {
+        setUser(null)
+      }
+      // Do NOT redirect on session change — user navigates to dashboard manually
     })
     return () => subscription.unsubscribe()
-  }, [supabase, router])
+  }, [supabase])
 
   async function handleLogout() {
     await supabase.auth.signOut()
