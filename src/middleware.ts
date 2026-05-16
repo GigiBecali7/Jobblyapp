@@ -36,7 +36,8 @@ export async function middleware(request: NextRequest) {
 
   // Protect /dashboard and all sub-routes
   const isDashboard = pathname === '/dashboard' || pathname.startsWith('/dashboard/')
-  if (isDashboard && !user) {
+  const isOnboarding = pathname === '/onboarding'
+  if ((isDashboard || isOnboarding) && !user) {
     return NextResponse.redirect(`${appUrl}/`)
   }
 

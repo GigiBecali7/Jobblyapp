@@ -58,7 +58,6 @@ export default function Footer({ onOpenLegal }: Props) {
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, color: '#8892A4', textTransform: 'uppercase', marginBottom: 16 }}>Rechtliches</div>
             {[
               { label: 'Impressum', section: 'impressum' },
-              { label: 'Datenschutz', section: 'datenschutz' },
               { label: 'AGB', section: 'agb' },
               { label: 'Cookie-Einstellungen', section: 'cookies' },
             ].map(l => (
@@ -69,6 +68,12 @@ export default function Footer({ onOpenLegal }: Props) {
                 {l.label}
               </button>
             ))}
+            <a href="/datenschutz"
+              style={{ display: 'block', fontSize: 14, color: '#8892A4', textDecoration: 'none', marginBottom: 10, transition: 'color .2s' }}
+              onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = '#fff'}
+              onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = '#8892A4'}>
+              Datenschutzerklärung
+            </a>
           </div>
 
           {/* Contact */}

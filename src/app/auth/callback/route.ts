@@ -57,7 +57,21 @@ export async function GET(request: NextRequest) {
     is_pro: false,
   }, { onConflict: 'id', ignoreDuplicates: true })
 
-  // OAuth users (Google etc.) go directly to dashboard
+  // Check if user has completed onboarding
+  const { data: profileData } = await supabase
+    .from('profiles')
+    .select('onboarding_completed, first_name')
+    .eq('id', user.id)
+    .single()
+
+  // onboarding_completed = false (strictly) means they need onboarding
+  // null/undefined = column doesn't exist yet or existing user → go to dashboard
+  const needsOnboarding = profileData?.onboarding_completed === false
+
+  if (needsOnboarding) {
+    return NextResponse.redirect(`${appUrl}/onboarding`)
+  }
+
   if (isOAuth) {
     return NextResponse.redirect(`${appUrl}/dashboard`)
   }

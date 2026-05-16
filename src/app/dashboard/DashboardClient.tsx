@@ -5,7 +5,6 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { JMark } from '@/components/JLogo'
-import Onboarding from '@/components/Onboarding'
 import type { UserProfile, Application } from '@/lib/types'
 
 interface Props {
@@ -607,7 +606,7 @@ function ProfileCompleteness({ profile, onNav }: { profile: UserProfile; onNav: 
             </div>
           ))}
           <button onClick={() => onNav('profile')} style={{ marginTop: 8, width: '100%', padding: '7px', borderRadius: 8, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600 }}>
-            Profil vervollständigen →
+            Profil bearbeiten →
           </button>
         </>
       )}
@@ -2376,7 +2375,12 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
 
   const mockJobs = useMemo(() => makeMockJobs(), [])
   const [dashJobs, setDashJobs] = useState<ReturnType<typeof makeMockJobs>>([])
-  const showOnboarding = !profile.first_name
+  const profileScoreFields = [
+    profile.first_name, profile.last_name, String((profile as UserProfile & Record<string, unknown>).photo_url || (profile as UserProfile & Record<string, unknown>).avatar_url || ''),
+    String(profile.position || ''), String(profile.industry || ''), String(profile.city || ''),
+    String(profile.experience || ''), String(profile.phone || ''),
+  ]
+  const profileScore = Math.round(profileScoreFields.filter(Boolean).length / profileScoreFields.length * 100)
 
   // Fetch real jobs for dashboard home "Top Job Matches" on mount
   useEffect(() => {
@@ -2444,7 +2448,7 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
 
           <div style={{ display: 'flex', gap: 14, marginBottom: 32 }}>
             <StatCard icon="💼" value={String(dashJobs.length || 0)} label="Passende Jobs" sub="Aktuell" subColor={C.success} onClick={() => setActiveNav('jobs')} />
-            <StatCard icon="📊" value="85%" label="Profil Match" sub="Sehr gut" subColor={C.success} onClick={() => setActiveNav('profile')} />
+            <StatCard icon="📊" value={`${profileScore}%`} label="Profil Match" sub={profileScore >= 80 ? 'Sehr gut' : profileScore >= 50 ? 'Ausbaufähig' : 'Unvollständig'} subColor={profileScore >= 80 ? C.success : C.amber} onClick={() => setActiveNav('profile')} />
             <StatCard icon="📋" value={String(applications.length)} label="Bewerbungen" sub="Insgesamt" subColor={C.mid} onClick={() => setActiveNav('applications')} />
             <StatCard icon="⭐" value="3" label="Einladungen" sub="Letzte 30 Tage" subColor={C.success} onClick={() => setActiveNav('applications')} />
           </div>
@@ -2456,7 +2460,7 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
                 <div style={{ fontSize: 13, fontWeight: 600, color: C.white, marginBottom: 3 }}>Vervollständige dein Profil für bessere Matches</div>
                 <div style={{ fontSize: 12, color: C.mid }}>Mit einem vollständigen Profil findest du bis zu 3× mehr passende Jobs.</div>
               </div>
-              <button onClick={() => setActiveNav('profile')} style={{ padding: '8px 16px', borderRadius: 9, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>Profil vervollständigen</button>
+              <button onClick={() => { const p = profile as UserProfile & Record<string, unknown>; if (p.onboarding_completed === false) router.push('/onboarding'); else setActiveNav('profile') }} style={{ padding: '8px 16px', borderRadius: 9, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>Profil vervollständigen</button>
             </div>
           )}
 
@@ -2490,8 +2494,6 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
 
   return (
     <>
-      {showOnboarding && <Onboarding profile={profile} onComplete={() => router.refresh()} />}
-
       <div style={{ display: 'flex', height: '100vh', background: C.bg, overflow: 'hidden' }}>
         <Sidebar active={activeNav} onNav={handleNav} profile={profile} isPro={isPro} onUpgrade={() => setShowUpgrade(true)} onLogout={handleLogout} jobCount={dashJobs.length} />
 
