@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import { JMark } from '@/components/JLogo'
 import type { UserProfile, Application } from '@/lib/types'
 import { getProfileCompleteness } from '@/lib/profileCompleteness'
+import { useIsMobile } from '@/lib/useIsMobile'
 
 interface Props {
   profile: UserProfile
@@ -141,6 +142,102 @@ function AvatarPopup({ profile, isPro, onNavigate, side }: { profile: UserProfil
         Meine Daten bearbeiten →
       </button>
     </div>
+  )
+}
+
+// ── Mobile components ─────────────────────────────────────────────────────────
+const BOTTOM_NAV: { id: NavId; icon: string; label: string }[] = [
+  { id: 'dashboard', icon: '🏠', label: 'Home' },
+  { id: 'jobs',      icon: '🔍', label: 'Jobs' },
+  { id: 'cv',        icon: '📄', label: 'CV' },
+  { id: 'letter',    icon: '✉️', label: 'Brief' },
+  { id: 'profile',   icon: '👤', label: 'Profil' },
+]
+
+function MobileTopBar({ onHamburger, isPro, onUpgrade }: { onHamburger: () => void; isPro: boolean; onUpgrade: () => void }) {
+  return (
+    <header style={{ height: 56, background: C.bg, borderBottom: `0.5px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', flexShrink: 0, zIndex: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <JMark size={26} />
+        <span style={{ fontSize: 16, fontWeight: 700, color: C.white, letterSpacing: '-.3px' }}>
+          Jobbly<span style={{ color: C.navy3, fontWeight: 400 }}>.ai</span>
+        </span>
+      </div>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        {!isPro && (
+          <button onClick={onUpgrade} style={{ fontSize: 11, padding: '5px 11px', borderRadius: 20, background: 'rgba(124,58,237,0.2)', color: '#a78bfa', border: `0.5px solid rgba(124,58,237,0.4)`, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, whiteSpace: 'nowrap' }}>⭐ Pro</button>
+        )}
+        {isPro && (
+          <span style={{ fontSize: 11, padding: '5px 11px', borderRadius: 20, background: 'rgba(124,58,237,0.25)', color: '#a78bfa', border: `0.5px solid rgba(124,58,237,0.5)`, fontWeight: 700 }}>⭐ Premium</span>
+        )}
+        <button onClick={onHamburger} style={{ background: 'none', border: `0.5px solid ${C.border}`, borderRadius: 8, width: 40, height: 40, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: C.white }}>☰</button>
+      </div>
+    </header>
+  )
+}
+
+function MobileDrawer({ active, onNav, profile, isPro, onUpgrade, onLogout, onClose }: {
+  active: NavId; onNav: (id: NavId) => void
+  profile: UserProfile; isPro: boolean; onUpgrade: () => void; onLogout: () => void; onClose: () => void
+}) {
+  const initials = ((profile.first_name || '?').charAt(0) + (profile.last_name || '').charAt(0)).toUpperCase()
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 500, backdropFilter: 'blur(2px)' }} />
+      <div style={{ position: 'fixed', top: 0, left: 0, bottom: 0, width: 280, background: '#0f1929', borderRight: `0.5px solid ${C.border2}`, zIndex: 501, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+        <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: `0.5px solid ${C.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <JMark size={26} />
+            <span style={{ fontSize: 16, fontWeight: 700, color: C.white }}>Jobbly<span style={{ color: C.navy3, fontWeight: 400 }}>.ai</span></span>
+          </div>
+          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.06)', border: `0.5px solid ${C.border}`, borderRadius: '50%', width: 34, height: 34, cursor: 'pointer', color: C.mid, fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+        </div>
+        <nav style={{ flex: 1, padding: 10 }}>
+          {NAV.map(({ id, icon, label, badge }) => {
+            const isActive = active === id
+            return (
+              <button key={id} onClick={() => { onNav(id); onClose() }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', minHeight: 52, borderRadius: 10, border: 'none', cursor: 'pointer', background: isActive ? 'rgba(27,46,107,0.5)' : 'transparent', color: isActive ? C.white : C.mid, fontFamily: 'inherit', fontSize: 14, fontWeight: isActive ? 600 : 400, marginBottom: 4, textAlign: 'left' }}>
+                <span style={{ fontSize: 17, width: 22, textAlign: 'center', flexShrink: 0 }}>{icon}</span>
+                <span style={{ flex: 1 }}>{label}</span>
+                {badge && <span style={{ fontSize: 10, background: C.navy, color: C.navy3, padding: '2px 7px', borderRadius: 10, fontWeight: 700 }}>{badge}</span>}
+              </button>
+            )
+          })}
+        </nav>
+        {!isPro && (
+          <div style={{ margin: '0 10px 12px', padding: 14, borderRadius: 12, background: 'rgba(27,46,107,0.28)', border: `0.5px solid rgba(37,58,133,0.5)` }}>
+            <div style={{ fontSize: 22, textAlign: 'center', marginBottom: 6 }}>👑</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.white, textAlign: 'center', marginBottom: 10 }}>Upgrade auf Premium</div>
+            <button onClick={() => { onUpgrade(); onClose() }} style={{ width: '100%', padding: '10px', borderRadius: 8, background: `linear-gradient(135deg, ${C.purple}, ${C.purple2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 700 }}>Jetzt upgraden</button>
+          </div>
+        )}
+        <div style={{ padding: '12px 14px', borderTop: `0.5px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: C.white, flexShrink: 0 }}>{initials}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: C.white, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.first_name} {profile.last_name}</div>
+            <div style={{ fontSize: 10, color: C.mid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.email}</div>
+          </div>
+          <button onClick={onLogout} title="Abmelden" style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.mid, fontSize: 18, padding: 6, minWidth: 40, minHeight: 40, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>↩</button>
+        </div>
+      </div>
+    </>
+  )
+}
+
+function BottomNav({ active, onNav }: { active: NavId; onNav: (id: NavId) => void }) {
+  return (
+    <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0, height: 64, background: C.bg, borderTop: `0.5px solid ${C.border2}`, display: 'flex', alignItems: 'stretch', zIndex: 300, paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      {BOTTOM_NAV.map(({ id, icon, label }) => {
+        const isActive = active === id
+        return (
+          <button key={id} onClick={() => onNav(id)} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', color: isActive ? C.navy3 : C.mid, position: 'relative', minHeight: 44 }}>
+            {isActive && <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', width: 28, height: 2, borderRadius: 1, background: C.navy3 }} />}
+            <span style={{ fontSize: 20, lineHeight: 1 }}>{icon}</span>
+            <span style={{ fontSize: 10, fontWeight: isActive ? 700 : 400, letterSpacing: '.02em' }}>{label}</span>
+          </button>
+        )
+      })}
+    </nav>
   )
 }
 
@@ -608,7 +705,7 @@ function ProfileCompleteness({ profile, onNav }: { profile: UserProfile; onNav: 
   )
 }
 
-function RightSidebar({ applications, profile, onNav }: { applications: Application[]; profile: UserProfile; onNav: (id: NavId) => void }) {
+function RightSidebar({ applications, profile, onNav, isMobile }: { applications: Application[]; profile: UserProfile; onNav: (id: NavId) => void; isMobile?: boolean }) {
   const supabase = createClient()
   const p = profile as UserProfile & Record<string, unknown>
   const [salary, setSalary] = useState<number>(() => Number(p.salary_target) || 60000)
@@ -635,7 +732,10 @@ function RightSidebar({ applications, profile, onNav }: { applications: Applicat
   }, [applications])
 
   return (
-    <aside style={{ width: 288, flexShrink: 0, borderLeft: `0.5px solid ${C.border}`, padding: '24px 20px', overflowY: 'auto', background: C.bg }}>
+    <aside style={isMobile
+      ? { width: '100%', padding: '0', background: C.bg }
+      : { width: 288, flexShrink: 0, borderLeft: `0.5px solid ${C.border}`, padding: '24px 20px', overflowY: 'auto', background: C.bg }
+    }>
       <ProfileCompleteness profile={profile} onNav={onNav} />
       <section style={{ marginBottom: 28 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
@@ -722,8 +822,9 @@ function JobsSection({ isPro, onSelect, onNeedPro, initialSearch }: { isPro: boo
   const [loading, setLoading]   = useState(false)
   const [apiError, setApiError] = useState('')
   const [searched, setSearched] = useState(false)
+  const mob = useIsMobile()
 
-  const inSt: React.CSSProperties = { padding: '9px 14px', borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.04)', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none', width: '100%' }
+  const inSt: React.CSSProperties = { padding: '10px 14px', minHeight: 44, borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.04)', color: C.white, fontFamily: 'inherit', fontSize: mob ? 16 : 13, outline: 'none', width: '100%' }
   const selSt: React.CSSProperties = { ...inSt, background: '#0D1117', cursor: 'pointer' }
 
   async function doSearch() {
@@ -748,23 +849,41 @@ function JobsSection({ isPro, onSelect, onNeedPro, initialSearch }: { isPro: boo
 
   return (
     <div>
-      <h2 style={{ fontSize: 22, fontWeight: 700, color: C.white, marginBottom: 8 }}>Jobs finden</h2>
-      <p style={{ fontSize: 13, color: C.mid, marginBottom: 20 }}>{searched && !loading ? `${jobs.length} Jobs gefunden` : 'Echte Jobs aus Europa & DACH'}</p>
-      {/* Filters */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 10, marginBottom: 20, alignItems: 'end' }}>
-        <input value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && doSearch()} placeholder="Jobtitel, Keywords…" style={inSt} />
-        <input value={location} onChange={e => setLocation(e.target.value)} onKeyDown={e => e.key === 'Enter' && doSearch()} placeholder="Stadt, Region…" style={inSt} />
-        <select value={workType} onChange={e => setWorkType(e.target.value)} style={selSt}>
-          <option value="">Alle Modelle</option>
-          <option value="Remote">Remote</option>
-          <option value="Hybrid">Hybrid</option>
-          <option value="Vor Ort">Vor Ort</option>
-        </select>
-        <button onClick={doSearch} disabled={loading}
-          style={{ padding: '9px 20px', borderRadius: 9, background: C.navy, color: C.white, border: 'none', cursor: loading ? 'wait' : 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>
-          {loading ? '⏳' : '🔍 Suchen'}
-        </button>
-      </div>
+      <h2 style={{ fontSize: mob ? 20 : 22, fontWeight: 700, color: C.white, marginBottom: 6 }}>Jobs finden</h2>
+      <p style={{ fontSize: 13, color: C.mid, marginBottom: 16 }}>{searched && !loading ? `${jobs.length} Jobs gefunden` : 'Echte Jobs aus Europa & DACH'}</p>
+      {/* Filters — stack on mobile */}
+      {mob ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+          <input value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && doSearch()} placeholder="Jobtitel, Keywords…" style={inSt} />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <input value={location} onChange={e => setLocation(e.target.value)} placeholder="Stadt…" style={inSt} />
+            <select value={workType} onChange={e => setWorkType(e.target.value)} style={selSt}>
+              <option value="">Alle Modelle</option>
+              <option value="Remote">Remote</option>
+              <option value="Hybrid">Hybrid</option>
+              <option value="Vor Ort">Vor Ort</option>
+            </select>
+          </div>
+          <button onClick={doSearch} disabled={loading} style={{ padding: '11px', minHeight: 48, borderRadius: 10, background: C.navy, color: C.white, border: 'none', cursor: loading ? 'wait' : 'pointer', fontFamily: 'inherit', fontSize: 15, fontWeight: 700 }}>
+            {loading ? '⏳ Suche läuft…' : '🔍 Jobs suchen'}
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 10, marginBottom: 20, alignItems: 'end' }}>
+          <input value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && doSearch()} placeholder="Jobtitel, Keywords…" style={inSt} />
+          <input value={location} onChange={e => setLocation(e.target.value)} onKeyDown={e => e.key === 'Enter' && doSearch()} placeholder="Stadt, Region…" style={inSt} />
+          <select value={workType} onChange={e => setWorkType(e.target.value)} style={selSt}>
+            <option value="">Alle Modelle</option>
+            <option value="Remote">Remote</option>
+            <option value="Hybrid">Hybrid</option>
+            <option value="Vor Ort">Vor Ort</option>
+          </select>
+          <button onClick={doSearch} disabled={loading}
+            style={{ padding: '9px 20px', borderRadius: 9, background: C.navy, color: C.white, border: 'none', cursor: loading ? 'wait' : 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>
+            {loading ? '⏳' : '🔍 Suchen'}
+          </button>
+        </div>
+      )}
       {loading && (
         <div style={{ textAlign: 'center', padding: '3rem', color: C.mid }}>
           <div style={{ fontSize: 32, marginBottom: 10 }}>⏳</div>
@@ -887,7 +1006,7 @@ function ApplicationsSection({ applications, profile }: { applications: Applicat
       {showAdd && (
         <div style={{ padding: '18px 20px', borderRadius: 12, border: `0.5px solid rgba(27,46,107,0.4)`, background: 'rgba(27,46,107,0.1)', marginBottom: 16 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: C.white, marginBottom: 14 }}>Neue Bewerbung</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, marginBottom: 10 }}>
             <div>
               <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 5 }}>Position *</label>
               <input value={newPos} onChange={e => setNewPos(e.target.value)} onKeyDown={e => e.key === 'Enter' && addApplication()} placeholder="z.B. Product Manager" style={inStyle} />
@@ -2344,6 +2463,8 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
   const supabase = createClient()
   const router = useRouter()
   const isPro = !!profile.is_pro
+  const isMobile = useIsMobile()
+  const [drawerOpen, setDrawerOpen] = useState(false)
 
   // Show upgrade/cancel toast from URL param (once)
   useEffect(() => {
@@ -2384,7 +2505,8 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
     setActiveNav(id)
   }
 
-  function renderContent() {
+  function renderContent(mob?: boolean) {
+    const m = mob ?? isMobile
     switch (activeNav) {
       case 'jobs': return <JobsSection isPro={isPro} onSelect={j => setSelectedJob(j)} onNeedPro={() => setShowUpgrade(true)} initialSearch={globalSearch} />
       case 'applications': return <ApplicationsSection applications={applications} profile={profile} />
@@ -2396,62 +2518,81 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
       case 'settings': return <SettingsSection profile={profile} isPro={isPro} onUpgrade={() => setShowUpgrade(true)} />
       default: return (
         <>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 28 }}>
-            <div>
+          {/* ── Header ── */}
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: m ? 20 : 28, gap: 12 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
               {justUpgraded && (
                 <div style={{ fontSize: 12, color: C.success, background: 'rgba(13,43,26,0.8)', border: '0.5px solid #2A6B47', borderRadius: 8, padding: '8px 14px', marginBottom: 14, display: 'inline-block' }}>
                   🎉 Willkommen bei Jobbly Premium! Dein Abo ist jetzt aktiv.
                 </div>
               )}
-              <h1 style={{ fontSize: 30, fontWeight: 700, color: C.white, marginBottom: 6, letterSpacing: '-.5px' }}>
+              <h1 style={{ fontSize: m ? 24 : 30, fontWeight: 700, color: C.white, marginBottom: 6, letterSpacing: '-.5px' }}>
                 {profile.first_name ? `Hallo ${profile.first_name}! 👋` : 'Hallo! 👋'}
               </h1>
-              <p style={{ fontSize: 15, color: C.mid }}>
+              <p style={{ fontSize: m ? 13 : 15, color: C.mid }}>
                 {profile.first_name ? 'Bereit für deinen nächsten Karriereschritt?' : (
                   <span>Vervollständige dein <span style={{ color: C.navy3, cursor: 'pointer' }} onClick={() => setActiveNav('profile')}>Profil →</span> um bessere Job-Matches zu erhalten.</span>
                 )}
               </p>
             </div>
-            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-              <button onClick={() => router.push('/dashboard/lebenslauf')} title="Lebenslauf erstellen"
-                style={{ width: 56, height: 56, borderRadius: 14, background: 'rgba(27,46,107,0.18)', border: `0.5px solid rgba(27,46,107,0.35)`, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, transition: 'all .15s' }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(27,46,107,0.35)'; e.currentTarget.style.borderColor = C.navy2 }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(27,46,107,0.18)'; e.currentTarget.style.borderColor = 'rgba(27,46,107,0.35)' }}>
-                <span style={{ fontSize: 22 }}>📄</span>
-                <span style={{ fontSize: 9, color: C.mid, fontWeight: 500, letterSpacing: '.04em' }}>CV</span>
-              </button>
-              <button onClick={() => router.push('/dashboard/anschreiben')} title="Anschreiben erstellen"
-                style={{ width: 56, height: 56, borderRadius: 14, background: 'rgba(99,102,241,0.12)', border: `0.5px solid rgba(99,102,241,0.25)`, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, transition: 'all .15s' }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.25)'; e.currentTarget.style.borderColor = 'rgba(99,102,241,0.5)' }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.12)'; e.currentTarget.style.borderColor = 'rgba(99,102,241,0.25)' }}>
-                <span style={{ fontSize: 22 }}>✨</span>
-                <span style={{ fontSize: 9, color: C.mid, fontWeight: 500, letterSpacing: '.04em' }}>Brief</span>
-              </button>
-            </div>
+            {!m && (
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                <button onClick={() => router.push('/dashboard/lebenslauf')} title="Lebenslauf erstellen"
+                  style={{ width: 56, height: 56, borderRadius: 14, background: 'rgba(27,46,107,0.18)', border: `0.5px solid rgba(27,46,107,0.35)`, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, transition: 'all .15s' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(27,46,107,0.35)'; e.currentTarget.style.borderColor = C.navy2 }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(27,46,107,0.18)'; e.currentTarget.style.borderColor = 'rgba(27,46,107,0.35)' }}>
+                  <span style={{ fontSize: 22 }}>📄</span>
+                  <span style={{ fontSize: 9, color: C.mid, fontWeight: 500, letterSpacing: '.04em' }}>CV</span>
+                </button>
+                <button onClick={() => router.push('/dashboard/anschreiben')} title="Anschreiben erstellen"
+                  style={{ width: 56, height: 56, borderRadius: 14, background: 'rgba(99,102,241,0.12)', border: `0.5px solid rgba(99,102,241,0.25)`, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, transition: 'all .15s' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.25)'; e.currentTarget.style.borderColor = 'rgba(99,102,241,0.5)' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.12)'; e.currentTarget.style.borderColor = 'rgba(99,102,241,0.25)' }}>
+                  <span style={{ fontSize: 22 }}>✨</span>
+                  <span style={{ fontSize: 9, color: C.mid, fontWeight: 500, letterSpacing: '.04em' }}>Brief</span>
+                </button>
+              </div>
+            )}
           </div>
 
-          <div style={{ display: 'flex', gap: 14, marginBottom: 32 }}>
+          {/* ── Stats: 2×2 on mobile, 4-in-row on desktop ── */}
+          <div style={m
+            ? { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }
+            : { display: 'flex', gap: 14, marginBottom: 32 }
+          }>
             <StatCard icon="💼" value={String(dashJobs.length || 0)} label="Passende Jobs" sub="Aktuell" subColor={C.success} onClick={() => setActiveNav('jobs')} />
             <StatCard icon="📊" value={`${profileScore}%`} label="Profil Match" sub={profileScore >= 80 ? 'Sehr gut' : profileScore >= 50 ? 'Ausbaufähig' : 'Unvollständig'} subColor={profileScore >= 80 ? C.success : C.amber} onClick={() => setActiveNav('profile')} />
             <StatCard icon="📋" value={String(applications.length)} label="Bewerbungen" sub="Insgesamt" subColor={C.mid} onClick={() => setActiveNav('applications')} />
             <StatCard icon="⭐" value="0" label="Einladungen" sub="Letzte 30 Tage" subColor={C.mid} onClick={() => setActiveNav('applications')} />
           </div>
 
+          {/* ── Mobile quick actions ── */}
+          {m && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
+              <button onClick={() => router.push('/dashboard/lebenslauf')} style={{ padding: '14px 10px', borderRadius: 12, background: 'rgba(27,46,107,0.18)', border: `0.5px solid rgba(27,46,107,0.35)`, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, color: C.white, fontFamily: 'inherit', fontSize: 13, fontWeight: 600 }}>
+                <span style={{ fontSize: 20 }}>📄</span> Lebenslauf
+              </button>
+              <button onClick={() => router.push('/dashboard/anschreiben')} style={{ padding: '14px 10px', borderRadius: 12, background: 'rgba(99,102,241,0.12)', border: `0.5px solid rgba(99,102,241,0.25)`, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, color: C.white, fontFamily: 'inherit', fontSize: 13, fontWeight: 600 }}>
+                <span style={{ fontSize: 20 }}>✨</span> Anschreiben
+              </button>
+            </div>
+          )}
+
           {applications.length === 0 && (
-            <div style={{ padding: '20px 24px', borderRadius: 12, border: `0.5px solid rgba(27,46,107,0.3)`, background: 'rgba(27,46,107,0.08)', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 16 }}>
-              <div style={{ fontSize: 28 }}>🎯</div>
+            <div style={{ padding: '16px 18px', borderRadius: 12, border: `0.5px solid rgba(27,46,107,0.3)`, background: 'rgba(27,46,107,0.08)', marginBottom: 20, display: 'flex', alignItems: m ? 'flex-start' : 'center', gap: 14, flexDirection: m ? 'column' : 'row' }}>
+              <div style={{ fontSize: 28, flexShrink: 0 }}>🎯</div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: C.white, marginBottom: 3 }}>Vervollständige dein Profil für bessere Matches</div>
                 <div style={{ fontSize: 12, color: C.mid }}>Mit einem vollständigen Profil findest du bis zu 3× mehr passende Jobs.</div>
               </div>
-              <button onClick={() => { const p = profile as UserProfile & Record<string, unknown>; if (p.onboarding_completed === false) router.push('/onboarding'); else setActiveNav('profile') }} style={{ padding: '8px 16px', borderRadius: 9, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>Profil vervollständigen</button>
+              <button onClick={() => { const p = profile as UserProfile & Record<string, unknown>; if (p.onboarding_completed === false) router.push('/onboarding'); else setActiveNav('profile') }} style={{ padding: '10px 16px', minHeight: 44, borderRadius: 9, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', width: m ? '100%' : 'auto' }}>Profil vervollständigen</button>
             </div>
           )}
 
-          <div style={{ marginBottom: 24 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-              <div style={{ fontSize: 16, fontWeight: 700, color: C.white }}>Top Job Matches für dich</div>
-              <span style={{ fontSize: 13, color: C.navy3, cursor: 'pointer', fontWeight: 500 }} onClick={() => setActiveNav('jobs')}>Alle anzeigen</span>
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: C.white }}>Top Job Matches für dich</div>
+              <span style={{ fontSize: 13, color: C.navy3, cursor: 'pointer', fontWeight: 500 }} onClick={() => setActiveNav('jobs')}>Alle →</span>
             </div>
             {dashJobs.slice(0, 3).map(job => (
               <JobCard key={job.id} job={job} onClick={() => {
@@ -2461,13 +2602,14 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
             ))}
           </div>
 
-          <div style={{ padding: '20px 22px', borderRadius: 14, background: 'linear-gradient(135deg, rgba(99,102,241,0.2) 0%, rgba(139,92,246,0.1) 100%)', border: `0.5px solid rgba(99,102,241,0.35)`, display: 'flex', alignItems: 'center', gap: 20 }}>
-            <div style={{ fontSize: 14 }}>✨</div>
+          {/* ── KI banner: stack on mobile ── */}
+          <div style={{ padding: m ? '16px' : '20px 22px', borderRadius: 14, background: 'linear-gradient(135deg, rgba(99,102,241,0.2) 0%, rgba(139,92,246,0.1) 100%)', border: `0.5px solid rgba(99,102,241,0.35)`, display: 'flex', alignItems: m ? 'flex-start' : 'center', gap: 16, flexDirection: m ? 'column' : 'row' }}>
+            <div style={{ fontSize: 20 }}>✨</div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: C.white, marginBottom: 3 }}>KI Anschreiben erstellen</div>
               <div style={{ fontSize: 12, color: C.mid }}>Individuelles Anschreiben, perfekt auf den Job zugeschnitten.</div>
             </div>
-            <button onClick={() => router.push('/dashboard/anschreiben')} style={{ padding: '9px 18px', borderRadius: 9, background: `linear-gradient(135deg, ${C.purple}, ${C.purple2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>
+            <button onClick={() => router.push('/dashboard/anschreiben')} style={{ padding: '11px 18px', minHeight: 44, borderRadius: 9, background: `linear-gradient(135deg, ${C.purple}, ${C.purple2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', width: m ? '100%' : 'auto' }}>
               Jetzt erstellen →
             </button>
           </div>
@@ -2476,6 +2618,41 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
     }
   }
 
+  const modals = (
+    <>
+      {selectedJob && <JobDetailModal job={selectedJob} profile={profile} onClose={() => setSelectedJob(null)} />}
+      {showUpgrade && <UpgradeModal onClose={() => setShowUpgrade(false)} onUpgrade={() => setShowUpgrade(false)} />}
+      {globalToast && (
+        <div className="profile-save-toast" style={{ background: upgradeStatus === 'success' ? '#0D2A1A' : '#1a1a2e', color: upgradeStatus === 'success' ? '#4ade80' : '#8892A4', borderColor: upgradeStatus === 'success' ? '#2A6B47' : 'rgba(255,255,255,0.1)', fontSize: 14, maxWidth: 420, textAlign: 'center' }}>
+          {globalToast}
+        </div>
+      )}
+    </>
+  )
+
+  // ── Mobile layout ──────────────────────────────────────────────────────────
+  if (isMobile) {
+    return (
+      <>
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: C.bg, overflow: 'hidden' }}>
+          <MobileTopBar onHamburger={() => setDrawerOpen(true)} isPro={isPro} onUpgrade={() => setShowUpgrade(true)} />
+          <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '16px 16px 80px' }}>
+            {renderContent(true)}
+            {activeNav === 'dashboard' && (
+              <div style={{ marginTop: 24, borderTop: `0.5px solid ${C.border}`, paddingTop: 20 }}>
+                <RightSidebar applications={applications} profile={profile} onNav={handleNav} isMobile />
+              </div>
+            )}
+          </main>
+          <BottomNav active={activeNav} onNav={handleNav} />
+        </div>
+        {drawerOpen && <MobileDrawer active={activeNav} onNav={handleNav} profile={profile} isPro={isPro} onUpgrade={() => setShowUpgrade(true)} onLogout={handleLogout} onClose={() => setDrawerOpen(false)} />}
+        {modals}
+      </>
+    )
+  }
+
+  // ── Desktop layout (unchanged) ─────────────────────────────────────────────
   return (
     <>
       <div style={{ display: 'flex', height: '100vh', background: C.bg, overflow: 'hidden' }}>
@@ -2492,14 +2669,7 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
           </div>
         </div>
       </div>
-
-      {selectedJob && <JobDetailModal job={selectedJob} profile={profile} onClose={() => setSelectedJob(null)} />}
-      {showUpgrade && <UpgradeModal onClose={() => setShowUpgrade(false)} onUpgrade={() => setShowUpgrade(false)} />}
-      {globalToast && (
-        <div className="profile-save-toast" style={{ background: upgradeStatus === 'success' ? '#0D2A1A' : '#1a1a2e', color: upgradeStatus === 'success' ? '#4ade80' : '#8892A4', borderColor: upgradeStatus === 'success' ? '#2A6B47' : 'rgba(255,255,255,0.1)', fontSize: 14, maxWidth: 420, textAlign: 'center' }}>
-          {globalToast}
-        </div>
-      )}
+      {modals}
     </>
   )
 }

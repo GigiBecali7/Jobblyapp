@@ -3,6 +3,7 @@ import React, { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { CVDesign } from '@/components/cv/types'
 import { getDashT, getCurrentLang } from '@/lib/dashboard-i18n'
+import { useIsMobile } from '@/lib/useIsMobile'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface CoverLetter {
@@ -127,6 +128,7 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
   const supabase = createClient()
   const lang     = getCurrentLang()
   const t        = getDashT(lang)
+  const mob      = useIsMobile()
 
   const [view, setView]       = useState<'list' | 'input' | 'preview'>('list')
   const [letters, setLetters] = useState<CoverLetter[]>(initialLetters)
@@ -273,7 +275,7 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
       )}
 
       {/* Header */}
-      <div style={{ backgroundColor: C.card, borderBottom: `1px solid ${C.border}`, padding: '16px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+      <div style={{ backgroundColor: C.card, borderBottom: `1px solid ${C.border}`, padding: mob ? '12px 16px' : '16px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <div>
           <a href="/dashboard" style={{ color: C.navy3, textDecoration: 'none', fontSize: 13 }}>{t.dashboard}</a>
           <h1 style={{ margin: '4px 0 0', fontSize: 22, fontWeight: 700 }}>{t.letterTitle}</h1>
@@ -284,7 +286,7 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
         </div>
       </div>
 
-      <div style={{ maxWidth: 960, margin: '0 auto', padding: '32px 24px' }}>
+      <div style={{ maxWidth: 960, margin: '0 auto', padding: mob ? '16px' : '32px 24px' }}>
 
         {/* ══ LIST VIEW ══════════════════════════════════════════════════════ */}
         {view === 'list' && (
@@ -322,9 +324,9 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
 
         {/* ══ INPUT VIEW ═════════════════════════════════════════════════════ */}
         {view === 'input' && (
-          <div style={{ backgroundColor: C.card, borderRadius: 14, padding: 32, border: `1px solid ${C.border}` }}>
-            <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 24 }}>{t.newLetter}</h2>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 28 }}>
+          <div style={{ backgroundColor: C.card, borderRadius: 14, padding: mob ? 16 : 32, border: `1px solid ${C.border}` }}>
+            <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 20 }}>{t.newLetter}</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr' : '1fr 1fr', gap: 16, marginBottom: 24 }}>
               <div>
                 <label style={labelStyle}>{t.letterJob}</label>
                 <input value={jobTitle} onChange={e => { setJobTitle(e.target.value); if (errors.job) setErrors(p => ({ ...p, job: '' })) }}
@@ -347,9 +349,9 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
                 <div style={{ fontSize: 14, color: C.navy3 }}>{t.letterGenerating}</div>
               </div>
             ) : (
-              <div style={{ display: 'flex', gap: 12 }}>
-                <button onClick={handleGenerate} style={{ ...btnPrimary('#10b981'), fontSize: 15, padding: '13px 28px' }}>{t.letterGenerate}</button>
-                <button onClick={() => { setView('list'); resetForm() }} style={btnSecondary}>{t.cancel}</button>
+              <div style={{ display: 'flex', gap: 10, flexDirection: mob ? 'column' : 'row' }}>
+                <button onClick={handleGenerate} style={{ ...btnPrimary('#10b981'), fontSize: mob ? 16 : 15, padding: mob ? '14px 20px' : '13px 28px', minHeight: 48 }}>{t.letterGenerate}</button>
+                <button onClick={() => { setView('list'); resetForm() }} style={{ ...btnSecondary, minHeight: 44 }}>{t.cancel}</button>
               </div>
             )}
           </div>
@@ -359,9 +361,9 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
         {view === 'preview' && (
           <div>
             {/* Action bar */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-              <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>{jobTitle} — {company}</h2>
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: mob ? 'flex-start' : 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10, flexDirection: mob ? 'column' : 'row' }}>
+              <h2 style={{ fontSize: mob ? 16 : 18, fontWeight: 700, margin: 0 }}>{jobTitle} — {company}</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr 1fr' : 'auto auto auto auto', gap: 8 }}>
                 <button onClick={handleSave} disabled={saving} style={{ ...btnPrimary('#6366f1'), opacity: saving ? 0.7 : 1 }}>
                   {saving ? t.saving : t.letterSave}
                 </button>
@@ -376,7 +378,7 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
             </div>
 
             {/* Editor + Design picker */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 20, marginBottom: 24 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr' : '1fr 260px', gap: 20, marginBottom: 24 }}>
               <div style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20 }}>
                 <div style={{ fontSize: 12, color: C.navy3, marginBottom: 10, fontWeight: 500 }}>✏️ {t.letterEditHint}</div>
                 <textarea value={editableText} onChange={e => setEditableText(e.target.value)}

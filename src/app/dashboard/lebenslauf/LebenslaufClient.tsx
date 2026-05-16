@@ -5,6 +5,7 @@ import type { CVDesign, FontFamily, FontSize, LineSpacing, CVProps, CVSections }
 import { DEFAULT_SECTIONS } from '@/components/cv/types'
 import { createClient } from '@/lib/supabase/client'
 import { getDashT, getCurrentLang } from '@/lib/dashboard-i18n'
+import { useIsMobile } from '@/lib/useIsMobile'
 
 const NordicMinimal  = dynamic(() => import('@/components/cv/NordicMinimal'),  { ssr: false })
 const NordicSidebar  = dynamic(() => import('@/components/cv/NordicSidebar'),  { ssr: false })
@@ -142,6 +143,7 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
   const storageKey  = `jobbly_cvs2_${userId}`
   const lang        = getCurrentLang()
   const t           = getDashT(lang)
+  const mob         = useIsMobile()
 
   // Build localized sections object for CV designs
   const sections: CVSections = {
@@ -405,7 +407,7 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
       )}
 
       {/* Header */}
-      <div style={{ backgroundColor: C.card, borderBottom: `1px solid ${C.border}`, padding: '16px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+      <div style={{ backgroundColor: C.card, borderBottom: `1px solid ${C.border}`, padding: mob ? '12px 16px' : '16px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <div>
           <a href="/dashboard" style={{ color: C.navy3, textDecoration: 'none', fontSize: 13 }}>{t.dashboard}</a>
           <h1 style={{ margin: '4px 0 0', fontSize: 22, fontWeight: 700, color: C.white }}>{t.cvTitle}</h1>
@@ -428,7 +430,7 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
         </div>
       </div>
 
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 24px' }}>
+      <div style={{ maxWidth: 1200, margin: '0 auto', padding: mob ? '16px' : '32px 24px' }}>
 
         {/* ══ LIST VIEW ══════════════════════════════════════════════════════ */}
         {view === 'list' && (
@@ -547,7 +549,7 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
                           <button onClick={() => removeExp(i)} style={btnDanger}>{t.removeEntry}</button>
                         )}
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr' : '1fr 1fr', gap: 10, marginBottom: 10 }}>
                         <div>
                           <label style={labelStyle}>{t.jobTitle}</label>
                           <input value={e.title} onChange={ev => updExp(i, 'title', ev.target.value)} style={inStyle} placeholder="z.B. Senior Developer" />
@@ -581,7 +583,7 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
                           <button onClick={() => removeEdu(i)} style={btnDanger}>{t.removeEntry}</button>
                         )}
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr' : '1fr 1fr', gap: 10, marginBottom: 10 }}>
                         <div>
                           <label style={labelStyle}>{t.degree}</label>
                           <input value={e.degree} onChange={ev => updEdu(i, 'degree', ev.target.value)} style={inStyle} placeholder="z.B. B.Sc. Informatik" />
