@@ -3,7 +3,6 @@ import React, { useState, useEffect, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import type { CVDesign, FontFamily, FontSize, LineSpacing, CVProps, CVSections } from '@/components/cv/types'
 import { DEFAULT_SECTIONS } from '@/components/cv/types'
-import { createClient } from '@/lib/supabase/client'
 import { getDashT, getCurrentLang } from '@/lib/dashboard-i18n'
 import { useIsMobile } from '@/lib/useIsMobile'
 
@@ -36,6 +35,7 @@ interface SavedCV {
   langEntries: LangEntry[]
   skillTags: string[]
   createdAt: string
+  editCount: number
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -137,10 +137,10 @@ const btnDanger: React.CSSProperties = {
   padding: '5px 10px', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit',
 }
 
+const MAX_FREE_EDITS = 5
+
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function LebenslaufClient({ isPro, existingCVCount, profile, userId }: Props) {
-  const supabase    = createClient()
-  const storageKey  = `jobbly_cvs2_${userId}`
   const lang        = getCurrentLang()
   const t           = getDashT(lang)
   const mob         = useIsMobile()
@@ -178,22 +178,40 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
   const [errors, setErrors]         = useState<Record<string, string>>({})
   const [generating, setGenerating] = useState(false)
   const [saving, setSaving]         = useState(false)
+  const [loading, setLoading]       = useState(true)
   const [exporting, setExporting]   = useState(false)
   const [toast, setToast]           = useState<{ msg: string; ok: boolean } | null>(null)
   const skillInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    try { setSavedCVs(JSON.parse(localStorage.getItem(storageKey) || '[]')) } catch { /* ignore */ }
-  }, [storageKey])
+    fetch('/api/cv/list')
+      .then(r => r.json())
+      .then(json => {
+        if (json.cvs) {
+          setSavedCVs(json.cvs.map((row: Record<string, unknown>) => {
+            const content = (row.content as Record<string, unknown>) || {}
+            return {
+              id: row.id as string,
+              name: (row.title as string) || 'Lebenslauf',
+              design: (row.design as CVDesign) || 'NordicMinimal',
+              data: (content.data as CVProps) || {},
+              expEntries: (content.expEntries as ExpEntry[]) || [],
+              eduEntries: (content.eduEntries as EduEntry[]) || [],
+              langEntries: (content.langEntries as LangEntry[]) || [],
+              skillTags: (content.skillTags as string[]) || [],
+              createdAt: (row.created_at as string) || new Date().toISOString(),
+              editCount: (row.edit_count as number) || 0,
+            } as SavedCV
+          }))
+        }
+      })
+      .catch(() => { /* silently fail */ })
+      .finally(() => setLoading(false))
+  }, [])
 
   function showToast(msg: string, ok = true) {
     setToast({ msg, ok })
     setTimeout(() => setToast(null), 3500)
-  }
-
-  function persistCVs(cvs: SavedCV[]) {
-    setSavedCVs(cvs)
-    localStorage.setItem(storageKey, JSON.stringify(cvs))
   }
 
   // ── Computed current CVProps ──
@@ -217,15 +235,19 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
   }
 
   function openEdit(cv: SavedCV) {
+    if (!isPro && cv.editCount >= MAX_FREE_EDITS) {
+      showToast(`Free-Plan: max. ${MAX_FREE_EDITS} Bearbeitungen. Upgrade zu Pro!`, false)
+      return
+    }
     setFields({
-      firstName: cv.data.firstName, lastName: cv.data.lastName,
-      email: cv.data.email, phone: cv.data.phone, city: cv.data.city,
-      linkedin: cv.data.linkedin, photoUrl: cv.data.photoUrl, position: cv.data.position,
+      firstName: cv.data.firstName || '', lastName: cv.data.lastName || '',
+      email: cv.data.email || '', phone: cv.data.phone || '', city: cv.data.city || '',
+      linkedin: cv.data.linkedin || '', photoUrl: cv.data.photoUrl || '', position: cv.data.position || '',
       profile: cv.data.profile || '',
       fontFamily: cv.data.fontFamily || 'Inter', fontSize: cv.data.fontSize || 'medium',
       lineSpacing: cv.data.lineSpacing || 'normal',
     })
-    setProfileText(cv.data.profile)
+    setProfileText(cv.data.profile || '')
     setExpEntries(cv.expEntries?.length ? cv.expEntries : [emptyExp()])
     setEduEntries(cv.eduEntries?.length ? cv.eduEntries : [emptyEdu()])
     setLangEntries(cv.langEntries?.length ? cv.langEntries : [emptyLang()])
@@ -237,12 +259,44 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
     setErrors({}); setStep(1); setView('build')
   }
 
-  function deleteCv(id: string) { persistCVs(savedCVs.filter(c => c.id !== id)); showToast(t.toastDeleted) }
+  async function deleteCv(id: string) {
+    const res = await fetch('/api/cv/delete', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
+    if (res.ok) { setSavedCVs(prev => prev.filter(c => c.id !== id)); showToast(t.toastDeleted) }
+    else { showToast('Fehler beim Löschen', false) }
+  }
 
-  function duplicateCv(cv: SavedCV) {
-    const now = new Date().toISOString()
-    persistCVs([...savedCVs, { ...cv, id: `cv_${Date.now()}`, name: `${cv.name} (${t.copy})`, createdAt: now }])
-    showToast(t.toastDuplicated)
+  async function duplicateCv(cv: SavedCV) {
+    const res = await fetch('/api/cv/save', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: `${cv.name} (${t.copy})`, design: cv.design,
+        content: { data: cv.data, expEntries: cv.expEntries, eduEntries: cv.eduEntries, langEntries: cv.langEntries, skillTags: cv.skillTags },
+      }),
+    })
+    const json = await res.json()
+    if (json.cv) {
+      const row = json.cv as Record<string, unknown>
+      const content = (row.content as Record<string, unknown>) || {}
+      setSavedCVs(prev => [{ id: row.id as string, name: (row.title as string) || cv.name, design: (row.design as CVDesign) || cv.design, data: (content.data as CVProps) || cv.data, expEntries: (content.expEntries as ExpEntry[]) || cv.expEntries, eduEntries: (content.eduEntries as EduEntry[]) || cv.eduEntries, langEntries: (content.langEntries as LangEntry[]) || cv.langEntries, skillTags: (content.skillTags as string[]) || cv.skillTags, createdAt: (row.created_at as string) || new Date().toISOString(), editCount: 0 }, ...prev])
+      showToast(t.toastDuplicated)
+    } else if (json.limitReached) {
+      showToast(json.error || t.toastFreeLimit, false)
+    } else {
+      showToast('Fehler beim Duplizieren', false)
+    }
+  }
+
+  async function renameCv(id: string, newName: string) {
+    const cv = savedCVs.find(c => c.id === id)
+    if (!cv || !newName.trim()) return
+    const res = await fetch('/api/cv/save', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id, title: newName.trim(), design: cv.design,
+        content: { data: cv.data, expEntries: cv.expEntries, eduEntries: cv.eduEntries, langEntries: cv.langEntries, skillTags: cv.skillTags },
+      }),
+    })
+    if (res.ok) { setSavedCVs(prev => prev.map(c => c.id === id ? { ...c, name: newName.trim() } : c)) }
   }
 
   // ── Skills tag input ──
@@ -324,19 +378,52 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
 
   // ── Save ──
   async function handleSave() {
-    if (!isPro && existingCVCount >= 1 && !editingId) { showToast(t.toastFreeLimit, false); return }
     setSaving(true)
-    const now = new Date().toISOString()
-    const id  = editingId || `cv_${Date.now()}`
-    const newCV: SavedCV = {
-      id, name: cvName, design, data: currentProps,
-      expEntries, eduEntries, langEntries, skillTags,
-      createdAt: editingId ? (savedCVs.find(c => c.id === editingId)?.createdAt || now) : now,
-    }
-    persistCVs(editingId ? savedCVs.map(c => c.id === editingId ? newCV : c) : [...savedCVs, newCV])
-    setEditingId(id)
-    setSaving(false)
-    showToast(t.toastSaved)
+    try {
+      const editingCV = editingId ? savedCVs.find(c => c.id === editingId) : null
+      if (!isPro && editingCV && editingCV.editCount >= MAX_FREE_EDITS) {
+        showToast(`Free-Plan: max. ${MAX_FREE_EDITS} Bearbeitungen. Upgrade zu Pro!`, false)
+        return
+      }
+      if (!isPro && editingCV && editingCV.editCount === MAX_FREE_EDITS - 1) {
+        showToast(`Letzte Bearbeitung! Free-Plan erlaubt max. ${MAX_FREE_EDITS}. Upgrade für unbegrenzte Bearbeitungen.`, true)
+      }
+      const res = await fetch('/api/cv/save', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingId || undefined,
+          title: cvName,
+          design,
+          content: { data: currentProps, expEntries, eduEntries, langEntries, skillTags },
+        }),
+      })
+      const json = await res.json()
+      if (json.limitReached) { showToast(json.error || t.toastFreeLimit, false); return }
+      if (!res.ok) { showToast(json.error || 'Speichern fehlgeschlagen', false); return }
+
+      const row = json.cv as Record<string, unknown>
+      const content = (row.content as Record<string, unknown>) || {}
+      const savedCv: SavedCV = {
+        id: row.id as string,
+        name: (row.title as string) || cvName,
+        design: (row.design as CVDesign) || design,
+        data: (content.data as CVProps) || currentProps,
+        expEntries: (content.expEntries as ExpEntry[]) || expEntries,
+        eduEntries: (content.eduEntries as EduEntry[]) || eduEntries,
+        langEntries: (content.langEntries as LangEntry[]) || langEntries,
+        skillTags: (content.skillTags as string[]) || skillTags,
+        createdAt: (row.created_at as string) || new Date().toISOString(),
+        editCount: (row.edit_count as number) || 0,
+      }
+      if (editingId) {
+        setSavedCVs(prev => prev.map(c => c.id === editingId ? savedCv : c))
+      } else {
+        setSavedCVs(prev => [savedCv, ...prev])
+        setEditingId(savedCv.id)
+      }
+      showToast(t.toastSaved)
+    } catch { showToast('Speichern fehlgeschlagen', false) }
+    finally { setSaving(false) }
   }
 
   // ── PDF Export ──
@@ -434,7 +521,9 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
 
         {/* ══ LIST VIEW ══════════════════════════════════════════════════════ */}
         {view === 'list' && (
-          savedCVs.length === 0 ? (
+          loading ? (
+            <div style={{ textAlign: 'center', padding: '80px 20px', color: C.mid }}>Lade Lebensläufe…</div>
+          ) : savedCVs.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '80px 20px', border: `1px solid ${C.border}`, borderRadius: 16 }}>
               <div style={{ fontSize: 56, marginBottom: 16 }}>📄</div>
               <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>{t.cvEmptyTitle}</div>
@@ -443,27 +532,45 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-              {savedCVs.map(cv => (
-                <div key={cv.id} style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {renamingId === cv.id ? (
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <input value={renameVal} onChange={e => setRenameVal(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') { persistCVs(savedCVs.map(c => c.id === cv.id ? { ...c, name: renameVal || c.name } : c)); setRenamingId(null) } }}
-                        style={{ ...inStyle, flex: 1 }} autoFocus />
-                      <button onClick={() => { persistCVs(savedCVs.map(c => c.id === cv.id ? { ...c, name: renameVal || c.name } : c)); setRenamingId(null) }} style={btnPrimary()}>✓</button>
+              {savedCVs.map(cv => {
+                const editLimitReached = !isPro && cv.editCount >= MAX_FREE_EDITS
+                const editWarning      = !isPro && cv.editCount === MAX_FREE_EDITS - 1
+                return (
+                  <div key={cv.id} style={{ backgroundColor: C.card, border: `1px solid ${editLimitReached ? 'rgba(248,113,113,0.3)' : C.border}`, borderRadius: 14, padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {renamingId === cv.id ? (
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <input value={renameVal} onChange={e => setRenameVal(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') { renameCv(cv.id, renameVal || cv.name); setRenamingId(null) } }}
+                          style={{ ...inStyle, flex: 1 }} autoFocus />
+                        <button onClick={() => { renameCv(cv.id, renameVal || cv.name); setRenamingId(null) }} style={btnPrimary()}>✓</button>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 15, fontWeight: 600 }}>{cv.name}</div>
+                    )}
+                    <div style={{ fontSize: 12, color: C.mid, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <span>{DESIGNS.find(d => d.id === cv.design)?.label}</span>
+                      <span>·</span>
+                      <span>{new Date(cv.createdAt).toLocaleDateString()}</span>
+                      {!isPro && (
+                        <span style={{ color: editLimitReached ? C.error : editWarning ? C.amber : C.mid }}>
+                          · {cv.editCount}/{MAX_FREE_EDITS} Bearb.
+                        </span>
+                      )}
                     </div>
-                  ) : (
-                    <div style={{ fontSize: 15, fontWeight: 600 }}>{cv.name}</div>
-                  )}
-                  <div style={{ fontSize: 12, color: C.mid }}>{DESIGNS.find(d => d.id === cv.design)?.label} · {new Date(cv.createdAt).toLocaleDateString()}</div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <button onClick={() => openEdit(cv)} style={{ ...btnPrimary(), padding: '7px 14px', fontSize: 12 }}>{t.edit}</button>
-                    <button onClick={() => { setRenamingId(cv.id); setRenameVal(cv.name) }} style={{ ...btnSecondary, padding: '7px 12px', fontSize: 12 }}>{t.rename}</button>
-                    <button onClick={() => duplicateCv(cv)} style={{ ...btnSecondary, padding: '7px 12px', fontSize: 12 }}>{t.duplicate}</button>
-                    <button onClick={() => deleteCv(cv.id)} style={{ ...btnDanger, padding: '7px 12px' }}>{t.delete_}</button>
+                    {editLimitReached && (
+                      <div style={{ fontSize: 11, color: C.error, background: 'rgba(248,113,113,0.08)', borderRadius: 6, padding: '6px 10px' }}>
+                        Bearbeitungslimit erreicht — Upgrade zu Pro für unbegrenzte Bearbeitungen
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button onClick={() => openEdit(cv)} disabled={editLimitReached} style={{ ...btnPrimary(), padding: '7px 14px', fontSize: 12, opacity: editLimitReached ? 0.5 : 1, cursor: editLimitReached ? 'not-allowed' : 'pointer' }}>{t.edit}</button>
+                      <button onClick={() => { setRenamingId(cv.id); setRenameVal(cv.name) }} style={{ ...btnSecondary, padding: '7px 12px', fontSize: 12 }}>{t.rename}</button>
+                      <button onClick={() => duplicateCv(cv)} style={{ ...btnSecondary, padding: '7px 12px', fontSize: 12 }}>{t.duplicate}</button>
+                      <button onClick={() => deleteCv(cv.id)} style={{ ...btnDanger, padding: '7px 12px' }}>{t.delete_}</button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )
         )}

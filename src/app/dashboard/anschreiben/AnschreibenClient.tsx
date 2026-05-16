@@ -5,6 +5,8 @@ import type { CVDesign } from '@/components/cv/types'
 import { getDashT, getCurrentLang } from '@/lib/dashboard-i18n'
 import { useIsMobile } from '@/lib/useIsMobile'
 
+const MAX_FREE_EDITS = 5
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface CoverLetter {
   id: string
@@ -13,6 +15,7 @@ interface CoverLetter {
   design: string
   content: string
   created_at: string
+  edit_count: number
 }
 
 interface Props {
@@ -183,16 +186,30 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
     setSaving(true)
     try {
       if (editingId) {
-        await supabase.from('cover_letters').update({ content: editableText, design: selectedDesign }).eq('id', editingId)
-        setLetters(prev => prev.map(l => l.id === editingId ? { ...l, content: editableText, design: selectedDesign } : l))
+        const existing = letters.find(l => l.id === editingId)
+        if (!isPro && existing && existing.edit_count >= MAX_FREE_EDITS) {
+          showToast(`Free-Plan: max. ${MAX_FREE_EDITS} Bearbeitungen. Upgrade zu Pro!`, false)
+          return
+        }
+        const newCount = (existing?.edit_count || 0) + 1
+        await supabase.from('cover_letters').update({
+          content: editableText, design: selectedDesign,
+          edit_count: newCount, updated_at: new Date().toISOString(),
+        }).eq('id', editingId)
+        setLetters(prev => prev.map(l => l.id === editingId ? { ...l, content: editableText, design: selectedDesign, edit_count: newCount } : l))
+        if (!isPro && newCount === MAX_FREE_EDITS) {
+          showToast(`Letzte Bearbeitung! Free-Plan erlaubt max. ${MAX_FREE_EDITS}. Upgrade für mehr.`, true)
+        } else {
+          showToast(t.toastSaved)
+        }
       } else {
         const { data, error } = await supabase.from('cover_letters').insert({
-          user_id: userId, job_title: jobTitle, company, design: selectedDesign, content: editableText,
+          user_id: userId, job_title: jobTitle, company, design: selectedDesign, content: editableText, edit_count: 0,
         }).select().single()
         if (error) throw error
         if (data) { setLetters(prev => [data as CoverLetter, ...prev]); setEditingId((data as CoverLetter).id) }
+        showToast(t.toastSaved)
       }
-      showToast(t.toastSaved)
     } catch { showToast(t.toastGenerateError, false) }
     finally { setSaving(false) }
   }

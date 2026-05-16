@@ -2451,10 +2451,293 @@ function UpgradeModal({ onClose, onUpgrade }: { onClose: () => void; onUpgrade: 
   )
 }
 
+// ── Application Modal (4-step) ────────────────────────────────────────────────
+interface SavedCVMeta { id: string; title: string; design: string; edit_count: number }
+interface CoverLetterMeta { id: string; job_title: string; company: string; design: string; content: string }
+
+function ApplicationModal({
+  job, profile, isPro, applicationsCount, onClose, onSuccess,
+}: {
+  job: ReturnType<typeof makeMockJobs>[0]
+  profile: UserProfile
+  isPro: boolean
+  applicationsCount: number
+  onClose: () => void
+  onSuccess: () => void
+}) {
+  const MAX_FREE_APPS = 5
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1)
+  const [flowType, setFlowType] = useState<'email' | 'portal'>('portal')
+  const [recipientEmail, setRecipientEmail] = useState('')
+  const [cvs, setCvs] = useState<SavedCVMeta[]>([])
+  const [letters, setLetters] = useState<CoverLetterMeta[]>([])
+  const [selectedCvId, setSelectedCvId] = useState<string>('')
+  const [selectedLetterId, setSelectedLetterId] = useState<string>('')
+  const [sending, setSending] = useState(false)
+  const [loadingDocs, setLoadingDocs] = useState(true)
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
+  const supabase = createClient()
+
+  function showToast(msg: string, ok = true) { setToast({ msg, ok }); setTimeout(() => setToast(null), 4000) }
+
+  useEffect(() => {
+    Promise.all([
+      fetch('/api/cv/list').then(r => r.json()).then(j => setCvs(j.cvs || [])),
+      supabase.from('cover_letters').select('id,job_title,company,design,content').order('created_at', { ascending: false })
+        .then(({ data }) => setLetters((data || []) as CoverLetterMeta[])),
+    ]).finally(() => setLoadingDocs(false))
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const selectedCv = cvs.find(c => c.id === selectedCvId)
+  const selectedLetter = letters.find(l => l.id === selectedLetterId)
+
+  function canProceedStep1() {
+    if (flowType === 'email' && !recipientEmail.trim()) return false
+    return true
+  }
+
+  function canProceedStep2() { return !!selectedCvId && !!selectedLetterId }
+
+  async function handleSend() {
+    if (!isPro && applicationsCount >= MAX_FREE_APPS) {
+      showToast(`Free-Plan: max. ${MAX_FREE_APPS} Bewerbungen. Upgrade zu Pro!`, false); return
+    }
+    setSending(true)
+    try {
+      if (flowType === 'email') {
+        const res = await fetch('/api/apply/email', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            recipientEmail, jobTitle: job.title, company: job.company,
+            cvId: selectedCvId, coverLetterId: selectedLetterId,
+          }),
+        })
+        const json = await res.json()
+        if (!res.ok) { showToast(json.error || 'Senden fehlgeschlagen', false); return }
+      } else {
+        // Flow B: record application without sending email
+        await supabase.from('applications').insert({
+          user_id: profile.id, position: job.title, company: job.company,
+          status: 'Gesendet', application_method: 'portal',
+          cv_id: selectedCvId || null, cover_letter_id: selectedLetterId || null,
+          template: 'classic', style: 'balanced',
+          cv_data: {}, cover_letter: selectedLetter?.content || '',
+          applied_at: new Date().toISOString(),
+        })
+      }
+      showToast('Bewerbung erfolgreich! ✓')
+      setTimeout(() => { onSuccess(); onClose() }, 1800)
+    } catch { showToast('Fehler beim Senden', false) }
+    finally { setSending(false) }
+  }
+
+  const modalStyle: React.CSSProperties = {
+    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex',
+    alignItems: 'center', justifyContent: 'center', zIndex: 300, padding: 20, backdropFilter: 'blur(4px)',
+  }
+  const boxStyle: React.CSSProperties = {
+    background: '#0D1117', borderRadius: 16, border: '0.5px solid rgba(255,255,255,0.1)',
+    width: '100%', maxWidth: 560, maxHeight: '92vh', overflow: 'auto',
+  }
+  const stepBtn = (active: boolean): React.CSSProperties => ({
+    width: 28, height: 28, borderRadius: '50%', border: 'none', display: 'flex',
+    alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700,
+    backgroundColor: active ? C.navy : 'rgba(255,255,255,0.06)', color: active ? C.white : C.mid,
+    flexShrink: 0,
+  })
+  const selCard = (selected: boolean): React.CSSProperties => ({
+    padding: '12px 16px', borderRadius: 10, border: `1.5px solid ${selected ? C.navy : 'rgba(255,255,255,0.08)'}`,
+    background: selected ? 'rgba(27,46,107,0.2)' : 'rgba(255,255,255,0.02)',
+    cursor: 'pointer', transition: 'all .12s',
+  })
+
+  return (
+    <div style={modalStyle} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={boxStyle}>
+        {/* Header */}
+        <div style={{ padding: '18px 22px', borderBottom: '0.5px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 40, height: 40, borderRadius: 10, background: job.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: C.white }}>{job.initials}</div>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: C.white }}>{job.title}</div>
+              <div style={{ fontSize: 12, color: C.mid }}>{job.company}</div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {([1, 2, 3, 4] as const).map(s => (
+              <div key={s} style={stepBtn(step >= s)}>{s}</div>
+            ))}
+            <button onClick={onClose} style={{ marginLeft: 8, background: 'rgba(255,255,255,0.06)', border: '0.5px solid rgba(255,255,255,0.1)', borderRadius: '50%', width: 28, height: 28, cursor: 'pointer', color: C.mid, fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+          </div>
+        </div>
+
+        <div style={{ padding: '22px 22px' }}>
+          {toast && (
+            <div style={{ marginBottom: 16, padding: '10px 16px', borderRadius: 8, fontSize: 13, background: toast.ok ? '#0D2A1A' : '#2A0D0D', color: toast.ok ? '#4ADE80' : '#f87171', border: `1px solid ${toast.ok ? '#2A6B47' : '#6B2A2A'}` }}>
+              {toast.msg}
+            </div>
+          )}
+
+          {/* Step 1: Method & contact */}
+          {step === 1 && (
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: C.white, marginBottom: 6 }}>Bewerbungsart wählen</div>
+              <div style={{ fontSize: 13, color: C.mid, marginBottom: 20 }}>Wie möchtest du dich bewerben?</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
+                {([
+                  ['email', '📧', 'Per E-Mail', 'Jobbly sendet deine Bewerbung direkt an das Unternehmen'],
+                  ['portal', '🌐', 'Bewerbungsportal', 'Du bewirbst dich selbst über die Unternehmenswebsite'],
+                ] as const).map(([type, icon, label, desc]) => (
+                  <div key={type} onClick={() => setFlowType(type)} style={selCard(flowType === type)}>
+                    <div style={{ fontSize: 22, marginBottom: 6 }}>{icon}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.white, marginBottom: 3 }}>{label}</div>
+                    <div style={{ fontSize: 11, color: C.mid, lineHeight: 1.4 }}>{desc}</div>
+                  </div>
+                ))}
+              </div>
+              {flowType === 'email' && (
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: C.mid, marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: 0.8 }}>Empfänger-E-Mail *</label>
+                  <input
+                    value={recipientEmail} onChange={e => setRecipientEmail(e.target.value)}
+                    placeholder="bewerbung@unternehmen.de"
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: 9, border: '1px solid rgba(255,255,255,0.1)', background: '#0d0d1a', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none', boxSizing: 'border-box' as const }}
+                  />
+                </div>
+              )}
+              <button
+                onClick={() => canProceedStep1() && setStep(2)}
+                disabled={!canProceedStep1()}
+                style={{ width: '100%', padding: 12, borderRadius: 10, background: canProceedStep1() ? `linear-gradient(135deg, ${C.navy}, ${C.navy2})` : 'rgba(255,255,255,0.06)', color: canProceedStep1() ? C.white : C.mid, border: 'none', cursor: canProceedStep1() ? 'pointer' : 'not-allowed', fontFamily: 'inherit', fontSize: 14, fontWeight: 600 }}>
+                Weiter →
+              </button>
+            </div>
+          )}
+
+          {/* Step 2: Document picker */}
+          {step === 2 && (
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: C.white, marginBottom: 6 }}>Dokumente auswählen</div>
+              <div style={{ fontSize: 13, color: C.mid, marginBottom: 20 }}>Wähle Lebenslauf und Anschreiben für diese Bewerbung</div>
+              {loadingDocs ? (
+                <div style={{ textAlign: 'center', color: C.mid, padding: 32 }}>Lade Dokumente…</div>
+              ) : (
+                <>
+                  <div style={{ marginBottom: 20 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: C.mid, marginBottom: 10, textTransform: 'uppercase' as const, letterSpacing: 0.8 }}>Lebenslauf</div>
+                    {cvs.length === 0 ? (
+                      <div style={{ padding: '16px', borderRadius: 10, background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.2)', color: '#f87171', fontSize: 13 }}>
+                        Kein Lebenslauf gefunden. <a href="/dashboard/lebenslauf" style={{ color: '#93AFFD' }}>Jetzt erstellen →</a>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 8 }}>
+                        {cvs.map(cv => (
+                          <div key={cv.id} onClick={() => setSelectedCvId(cv.id)} style={selCard(selectedCvId === cv.id)}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: C.white }}>{cv.title}</div>
+                            <div style={{ fontSize: 11, color: C.mid, marginTop: 2 }}>{cv.design}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ marginBottom: 20 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: C.mid, marginBottom: 10, textTransform: 'uppercase' as const, letterSpacing: 0.8 }}>Anschreiben</div>
+                    {letters.length === 0 ? (
+                      <div style={{ padding: '16px', borderRadius: 10, background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.2)', color: '#f87171', fontSize: 13 }}>
+                        Kein Anschreiben gefunden. <a href="/dashboard/anschreiben" style={{ color: '#93AFFD' }}>Jetzt erstellen →</a>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 8 }}>
+                        {letters.map(l => (
+                          <div key={l.id} onClick={() => setSelectedLetterId(l.id)} style={selCard(selectedLetterId === l.id)}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: C.white }}>{l.job_title} — {l.company}</div>
+                            <div style={{ fontSize: 11, color: C.mid, marginTop: 2 }}>{l.design}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setStep(1)} style={{ flex: 1, padding: 11, borderRadius: 9, background: 'rgba(255,255,255,0.04)', color: C.mid, border: '0.5px solid rgba(255,255,255,0.1)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13 }}>← Zurück</button>
+                <button onClick={() => canProceedStep2() && setStep(3)} disabled={!canProceedStep2()} style={{ flex: 2, padding: 11, borderRadius: 9, background: canProceedStep2() ? `linear-gradient(135deg, ${C.navy}, ${C.navy2})` : 'rgba(255,255,255,0.06)', color: canProceedStep2() ? C.white : C.mid, border: 'none', cursor: canProceedStep2() ? 'pointer' : 'not-allowed', fontFamily: 'inherit', fontSize: 13, fontWeight: 600 }}>Vorschau →</button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Preview */}
+          {step === 3 && (
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: C.white, marginBottom: 16 }}>Vorschau</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+                <div style={{ padding: 14, borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: '0.5px solid rgba(255,255,255,0.08)' }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: C.mid, marginBottom: 8, textTransform: 'uppercase' as const, letterSpacing: 0.8 }}>📄 Lebenslauf</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: C.white }}>{selectedCv?.title}</div>
+                  <div style={{ fontSize: 11, color: C.mid, marginTop: 2 }}>{selectedCv?.design}</div>
+                </div>
+                <div style={{ padding: 14, borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: '0.5px solid rgba(255,255,255,0.08)' }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: C.mid, marginBottom: 8, textTransform: 'uppercase' as const, letterSpacing: 0.8 }}>✉️ Anschreiben</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: C.white }}>{selectedLetter?.job_title}</div>
+                  <div style={{ fontSize: 11, color: C.mid, marginTop: 2 }}>{selectedLetter?.company}</div>
+                </div>
+              </div>
+              <div style={{ padding: 14, borderRadius: 10, background: 'rgba(255,255,255,0.02)', border: '0.5px solid rgba(255,255,255,0.06)', marginBottom: 20 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: C.mid, marginBottom: 8 }}>Anschreiben Vorschau</div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', lineHeight: 1.7, maxHeight: 160, overflow: 'auto', whiteSpace: 'pre-wrap' }}>
+                  {selectedLetter?.content?.slice(0, 400)}{(selectedLetter?.content?.length || 0) > 400 ? '…' : ''}
+                </div>
+              </div>
+              <div style={{ padding: 12, borderRadius: 10, background: flowType === 'email' ? 'rgba(27,46,107,0.12)' : 'rgba(255,255,255,0.04)', border: `0.5px solid ${flowType === 'email' ? 'rgba(27,46,107,0.3)' : 'rgba(255,255,255,0.08)'}`, marginBottom: 20, fontSize: 13, color: C.mid }}>
+                {flowType === 'email' ? `📧 Wird gesendet an: ${recipientEmail}` : '🌐 Bewerbungsportal — Dokumente zum Download bereit'}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setStep(2)} style={{ flex: 1, padding: 11, borderRadius: 9, background: 'rgba(255,255,255,0.04)', color: C.mid, border: '0.5px solid rgba(255,255,255,0.1)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13 }}>← Zurück</button>
+                <button onClick={() => setStep(4)} style={{ flex: 2, padding: 11, borderRadius: 9, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600 }}>Senden →</button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 4: Send / Confirm */}
+          {step === 4 && (
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: C.white, marginBottom: 6 }}>
+                {flowType === 'email' ? 'Bewerbung absenden' : 'Bewerbung abschließen'}
+              </div>
+              <div style={{ fontSize: 13, color: C.mid, marginBottom: 24 }}>
+                {flowType === 'email'
+                  ? `Jobbly sendet deine Bewerbung direkt an ${recipientEmail}.`
+                  : 'Lade deine Dokumente herunter und bewirb dich über das Unternehmensportal.'}
+              </div>
+              {flowType === 'portal' && (
+                <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' as const }}>
+                  <a href={`/dashboard/lebenslauf`} style={{ flex: 1, padding: '10px 14px', borderRadius: 9, background: 'rgba(27,46,107,0.15)', border: '0.5px solid rgba(27,46,107,0.3)', color: '#93AFFD', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, textDecoration: 'none', display: 'block', textAlign: 'center' as const }}>
+                    📄 Lebenslauf öffnen
+                  </a>
+                  <a href={`/dashboard/anschreiben`} style={{ flex: 1, padding: '10px 14px', borderRadius: 9, background: 'rgba(99,102,241,0.1)', border: '0.5px solid rgba(99,102,241,0.25)', color: '#93AFFD', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, textDecoration: 'none', display: 'block', textAlign: 'center' as const }}>
+                    ✉️ Anschreiben öffnen
+                  </a>
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setStep(3)} disabled={sending} style={{ flex: 1, padding: 11, borderRadius: 9, background: 'rgba(255,255,255,0.04)', color: C.mid, border: '0.5px solid rgba(255,255,255,0.1)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13 }}>← Zurück</button>
+                <button onClick={handleSend} disabled={sending} style={{ flex: 2, padding: 12, borderRadius: 9, background: sending ? 'rgba(255,255,255,0.06)' : `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: sending ? C.mid : C.white, border: 'none', cursor: sending ? 'not-allowed' : 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 700 }}>
+                  {sending ? 'Wird gesendet…' : flowType === 'email' ? '📧 Bewerbung senden' : '✅ Bewerbung erfassen'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main dashboard ────────────────────────────────────────────────────────────
 export default function DashboardClient({ profile, applications, justUpgraded, upgradeStatus }: Props) {
   const [activeNav, setActiveNav] = useState<NavId>('dashboard')
   const [selectedJob, setSelectedJob] = useState<ReturnType<typeof makeMockJobs>[0] | null>(null)
+  const [applyJob, setApplyJob] = useState<ReturnType<typeof makeMockJobs>[0] | null>(null)
   const [showUpgrade, setShowUpgrade] = useState(false)
   const [globalSearch, setGlobalSearch] = useState('')
   const [globalToast, setGlobalToast] = useState<string>('')
@@ -2563,7 +2846,7 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
             <StatCard icon="💼" value={String(dashJobs.length || 0)} label="Passende Jobs" sub="Aktuell" subColor={C.success} onClick={() => setActiveNav('jobs')} />
             <StatCard icon="📊" value={`${profileScore}%`} label="Profil Match" sub={profileScore >= 80 ? 'Sehr gut' : profileScore >= 50 ? 'Ausbaufähig' : 'Unvollständig'} subColor={profileScore >= 80 ? C.success : C.amber} onClick={() => setActiveNav('profile')} />
             <StatCard icon="📋" value={String(applications.length)} label="Bewerbungen" sub="Insgesamt" subColor={C.mid} onClick={() => setActiveNav('applications')} />
-            <StatCard icon="⭐" value="0" label="Einladungen" sub="Letzte 30 Tage" subColor={C.mid} onClick={() => setActiveNav('applications')} />
+            <StatCard icon="⭐" value={String(applications.filter(a => ((a as unknown as Record<string, unknown>).status as string) === 'Interview').length)} label="Einladungen" sub="Letzte 30 Tage" subColor={C.mid} onClick={() => setActiveNav('applications')} />
           </div>
 
           {/* ── Mobile quick actions ── */}
@@ -2595,10 +2878,17 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
               <span style={{ fontSize: 13, color: C.navy3, cursor: 'pointer', fontWeight: 500 }} onClick={() => setActiveNav('jobs')}>Alle →</span>
             </div>
             {dashJobs.slice(0, 3).map(job => (
-              <JobCard key={job.id} job={job} onClick={() => {
-                if (!isPro) { setShowUpgrade(true); return }
-                setSelectedJob(job)
-              }} />
+              <div key={job.id} style={{ position: 'relative' }}>
+                <JobCard job={job} onClick={() => {
+                  if (!isPro) { setShowUpgrade(true); return }
+                  setSelectedJob(job)
+                }} />
+                <button
+                  onClick={e => { e.stopPropagation(); setApplyJob(job) }}
+                  style={{ position: 'absolute', bottom: 10, right: 12, padding: '5px 12px', borderRadius: 7, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600, zIndex: 1 }}>
+                  Bewerben →
+                </button>
+              </div>
             ))}
           </div>
 
@@ -2621,6 +2911,7 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
   const modals = (
     <>
       {selectedJob && <JobDetailModal job={selectedJob} profile={profile} onClose={() => setSelectedJob(null)} />}
+      {applyJob && <ApplicationModal job={applyJob} profile={profile} isPro={isPro} applicationsCount={applications.length} onClose={() => setApplyJob(null)} onSuccess={() => { setApplyJob(null); router.refresh() }} />}
       {showUpgrade && <UpgradeModal onClose={() => setShowUpgrade(false)} onUpgrade={() => setShowUpgrade(false)} />}
       {globalToast && (
         <div className="profile-save-toast" style={{ background: upgradeStatus === 'success' ? '#0D2A1A' : '#1a1a2e', color: upgradeStatus === 'success' ? '#4ade80' : '#8892A4', borderColor: upgradeStatus === 'success' ? '#2A6B47' : 'rgba(255,255,255,0.1)', fontSize: 14, maxWidth: 420, textAlign: 'center' }}>
