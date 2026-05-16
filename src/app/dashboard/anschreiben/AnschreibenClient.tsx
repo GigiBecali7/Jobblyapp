@@ -41,7 +41,7 @@ const DESIGNS: { id: CVDesign; label: string; desc: string; proOnly: boolean; em
   { id: 'MonoElegant',    label: 'Mono Elegant',     desc: 'Minimalistisch',        proOnly: true,  emoji: '⬛' },
 ]
 
-const MAX_FREE = 3
+const MAX_FREE = 1
 
 // ── Colors ────────────────────────────────────────────────────────────────────
 const C = {
