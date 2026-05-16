@@ -64,9 +64,12 @@ export async function GET(request: NextRequest) {
     .eq('id', user.id)
     .single()
 
-  // onboarding_completed = false (strictly) means they need onboarding
-  // null/undefined = column doesn't exist yet or existing user → go to dashboard
-  const needsOnboarding = profileData?.onboarding_completed === false
+  // Check if user needs onboarding
+  // Redirect when: onboarding_completed is false (new user after migration)
+  //             OR column doesn't exist yet AND first_name is empty (new user before migration)
+  const needsOnboarding =
+    profileData?.onboarding_completed === false ||
+    (profileData?.onboarding_completed == null && !profileData?.first_name)
 
   if (needsOnboarding) {
     return NextResponse.redirect(`${appUrl}/onboarding`)

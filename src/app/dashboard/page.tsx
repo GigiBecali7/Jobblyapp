@@ -16,13 +16,14 @@ export default async function DashboardPage({
   // Check onboarding before loading full dashboard data
   const { data: onboardingCheck } = await supabase
     .from('profiles')
-    .select('onboarding_completed')
+    .select('onboarding_completed, first_name')
     .eq('id', user.id)
     .single()
 
-  if (onboardingCheck?.onboarding_completed === false) {
-    redirect('/onboarding')
-  }
+  const needsOnboarding =
+    onboardingCheck?.onboarding_completed === false ||
+    (onboardingCheck?.onboarding_completed == null && !onboardingCheck?.first_name)
+  if (needsOnboarding) redirect('/onboarding')
 
   const [{ data: profile }, { data: applications }] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', user.id).single(),

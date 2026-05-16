@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { JMark } from '@/components/JLogo'
 import type { UserProfile, Application } from '@/lib/types'
+import { getProfileCompleteness } from '@/lib/profileCompleteness'
 
 interface Props {
   profile: UserProfile
@@ -78,6 +79,27 @@ function makeMockJobs() {
   }))
 }
 
+// ── Relative date formatter (German, never shows "Invalid Date") ──────────────
+function relativeDate(raw: string | number | undefined | null): string {
+  if (!raw) return ''
+  try {
+    const date = typeof raw === 'number' ? new Date(raw * 1000) : new Date(String(raw))
+    if (isNaN(date.getTime())) return ''
+    const diffMs = Date.now() - date.getTime()
+    if (diffMs < 0) return ''
+    const mins = Math.floor(diffMs / 60000)
+    if (mins < 2) return 'Gerade eben'
+    if (mins < 60) return `Vor ${mins} Minuten`
+    const hours = Math.floor(mins / 60)
+    if (hours < 24) return hours === 1 ? 'Vor 1 Stunde' : `Vor ${hours} Stunden`
+    const days = Math.floor(hours / 24)
+    if (days < 7) return days === 1 ? 'Vor 1 Tag' : `Vor ${days} Tagen`
+    const weeks = Math.floor(days / 7)
+    if (weeks < 5) return weeks === 1 ? 'Vor 1 Woche' : `Vor ${weeks} Wochen`
+    return date.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })
+  } catch { return '' }
+}
+
 // ── Real job API types & adapter ─────────────────────────────────────────────
 interface RealJob {
   id: string; title: string; company: string; location: string; type: string
@@ -90,7 +112,7 @@ function adaptJob(j: RealJob): ReturnType<typeof makeMockJobs>[0] {
   const seed = j.id.split('').reduce((a, c) => a + c.charCodeAt(0), 0)
   const color = palette[seed % palette.length]
   const initials = j.company.split(/\s+/).map(w => w[0] || '').join('').slice(0, 2).toUpperCase() || '??'
-  const dateStr = j.postedAt ? (() => { try { return new Date(j.postedAt).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' }) } catch { return '' } })() : ''
+  const dateStr = relativeDate(j.postedAt)
   return {
     id: j.id, company: j.company, initials, color, title: j.title,
     location: j.location, type: j.type,
@@ -256,25 +278,6 @@ function TopBar({ profile, isPro, onUpgrade, onNav, onSearch, avatarUrl }: { pro
       setNotifsLoaded(true)
     }
     fetchNotifs()
-  }, [profile.id]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Real-time: listen for new notifications
-  useEffect(() => {
-    const channel = supabase
-      .channel(`notifs:${profile.id}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${profile.id}` }, payload => {
-        const n = payload.new as Record<string, unknown>
-        setNotifs(prev => [{
-          id: String(n.id),
-          icon: String(n.icon || '🔔'),
-          title: String(n.title || ''),
-          desc: String(n.description || n.desc || ''),
-          time: 'Gerade eben',
-          read: false,
-        }, ...prev])
-      })
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
   }, [profile.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -569,22 +572,8 @@ function JobDetailModal({ job, profile, onClose }: { job: ReturnType<typeof make
 
 // ── Right Sidebar ─────────────────────────────────────────────────────────────
 function ProfileCompleteness({ profile, onNav }: { profile: UserProfile; onNav: (id: NavId) => void }) {
-  const p = profile as UserProfile & Record<string, unknown>
-  const fields: { key: string; label: string; val: unknown }[] = [
-    { key: 'first_name', label: 'Vorname', val: profile.first_name },
-    { key: 'last_name', label: 'Nachname', val: profile.last_name },
-    { key: 'photo', label: 'Profilfoto', val: p.photo },
-    { key: 'position', label: 'Position', val: p.position },
-    { key: 'industry', label: 'Branche', val: p.industry },
-    { key: 'experience', label: 'Berufserfahrung', val: p.experience },
-    { key: 'education', label: 'Ausbildung', val: p.education },
-    { key: 'skills', label: 'Kenntnisse', val: p.skills },
-    { key: 'languages', label: 'Sprachen', val: p.languages },
-    { key: 'city', label: 'Wohnort', val: p.city },
-  ]
-  const filled = fields.filter(f => f.val && String(f.val).trim()).length
-  const pct = Math.round((filled / fields.length) * 100)
-  const missing = fields.filter(f => !f.val || !String(f.val).trim()).slice(0, 2)
+  const { score: pct, missing: missingFields } = getProfileCompleteness(profile)
+  const missing = missingFields.slice(0, 2)
 
   return (
     <section style={{ marginBottom: 28 }}>
@@ -635,14 +624,12 @@ function RightSidebar({ applications, profile, onNav }: { applications: Applicat
   }
 
   const activity = useMemo(() => {
-    if (applications.length === 0) return [
-      { icon: '🎯', text: 'Profil anlegen', sub: 'Starte deinen ersten Lebenslauf', time: 'Jetzt', nav: 'profile' as NavId },
-      { icon: '🔔', text: 'Einladung erhalten', sub: 'Digital Solutions AG', time: 'Vor 5 Stunden', nav: 'applications' as NavId },
-      { icon: '⭐', text: 'Neuer Job Match', sub: 'Product Manager bei TechCorp', time: 'Vor 1 Tag', nav: 'jobs' as NavId },
-    ]
-    return applications.slice(0, 3).map((app, i) => ({
-      icon: '📋', text: 'Bewerbung angesehen', sub: `${app.company || app.position}`,
-      time: ['Vor 2 Stunden', 'Vor 5 Stunden', 'Vor 1 Tag'][i] || 'Kürzlich',
+    if (applications.length === 0) return []
+    return applications.slice(0, 5).map(app => ({
+      icon: '📋',
+      text: app.company || app.position || 'Bewerbung',
+      sub: app.position || app.company || '',
+      time: app.created_at ? relativeDate(app.created_at) : 'Kürzlich',
       nav: 'applications' as NavId,
     }))
   }, [applications])
@@ -706,7 +693,9 @@ function RightSidebar({ applications, profile, onNav }: { applications: Applicat
           <div style={{ fontSize: 14, fontWeight: 700, color: C.white }}>Aktivität</div>
           <span style={{ fontSize: 12, color: C.mid, cursor: 'pointer' }}>Alle ▾</span>
         </div>
-        {activity.map((a, i) => (
+        {activity.length === 0 ? (
+          <div style={{ fontSize: 12, color: C.mid, padding: '10px 0' }}>Noch keine Aktivität — sende deine erste Bewerbung, um sie hier zu sehen.</div>
+        ) : activity.map((a, i) => (
           <div key={i} onClick={() => a.nav && onNav(a.nav)}
             style={{ display: 'flex', gap: 10, marginBottom: 14, cursor: a.nav ? 'pointer' : 'default', borderRadius: 8, padding: '4px 6px', marginLeft: -6, transition: 'background .15s' }}
             onMouseEnter={e => { if (a.nav) e.currentTarget.style.background = 'rgba(255,255,255,0.03)' }}
@@ -2375,12 +2364,7 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
 
   const mockJobs = useMemo(() => makeMockJobs(), [])
   const [dashJobs, setDashJobs] = useState<ReturnType<typeof makeMockJobs>>([])
-  const profileScoreFields = [
-    profile.first_name, profile.last_name, String((profile as UserProfile & Record<string, unknown>).photo_url || (profile as UserProfile & Record<string, unknown>).avatar_url || ''),
-    String(profile.position || ''), String(profile.industry || ''), String(profile.city || ''),
-    String(profile.experience || ''), String(profile.phone || ''),
-  ]
-  const profileScore = Math.round(profileScoreFields.filter(Boolean).length / profileScoreFields.length * 100)
+  const profileScore = getProfileCompleteness(profile).score
 
   // Fetch real jobs for dashboard home "Top Job Matches" on mount
   useEffect(() => {
@@ -2450,7 +2434,7 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
             <StatCard icon="💼" value={String(dashJobs.length || 0)} label="Passende Jobs" sub="Aktuell" subColor={C.success} onClick={() => setActiveNav('jobs')} />
             <StatCard icon="📊" value={`${profileScore}%`} label="Profil Match" sub={profileScore >= 80 ? 'Sehr gut' : profileScore >= 50 ? 'Ausbaufähig' : 'Unvollständig'} subColor={profileScore >= 80 ? C.success : C.amber} onClick={() => setActiveNav('profile')} />
             <StatCard icon="📋" value={String(applications.length)} label="Bewerbungen" sub="Insgesamt" subColor={C.mid} onClick={() => setActiveNav('applications')} />
-            <StatCard icon="⭐" value="3" label="Einladungen" sub="Letzte 30 Tage" subColor={C.success} onClick={() => setActiveNav('applications')} />
+            <StatCard icon="⭐" value="0" label="Einladungen" sub="Letzte 30 Tage" subColor={C.mid} onClick={() => setActiveNav('applications')} />
           </div>
 
           {applications.length === 0 && (
