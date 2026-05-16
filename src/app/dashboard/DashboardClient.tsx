@@ -79,6 +79,28 @@ function makeMockJobs() {
   }))
 }
 
+// ── Real job API types & adapter ─────────────────────────────────────────────
+interface RealJob {
+  id: string; title: string; company: string; location: string; type: string
+  salary: string; description: string; url: string; postedAt: string
+  source: string; matchScore: number; skills: string[]
+}
+
+function adaptJob(j: RealJob): ReturnType<typeof makeMockJobs>[0] {
+  const palette = ['#6366f1', '#0ea5e9', '#8b5cf6', '#f59e0b', '#10b981', '#ec4899', '#14b8a6']
+  const seed = j.id.split('').reduce((a, c) => a + c.charCodeAt(0), 0)
+  const color = palette[seed % palette.length]
+  const initials = j.company.split(/\s+/).map(w => w[0] || '').join('').slice(0, 2).toUpperCase() || '??'
+  const dateStr = j.postedAt ? (() => { try { return new Date(j.postedAt).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' }) } catch { return '' } })() : ''
+  return {
+    id: j.id, company: j.company, initials, color, title: j.title,
+    location: j.location, type: j.type,
+    salary: j.salary || 'Gehalt nicht angegeben',
+    match: j.matchScore, skills: j.skills, posted: dateStr,
+    description: j.description, industry: '',
+  }
+}
+
 // ── Avatar Popup ──────────────────────────────────────────────────────────────
 function AvatarPopup({ profile, isPro, onNavigate, side }: { profile: UserProfile; isPro: boolean; onNavigate: () => void; side: 'top' | 'left' }) {
   return (
@@ -102,9 +124,9 @@ function AvatarPopup({ profile, isPro, onNavigate, side }: { profile: UserProfil
 }
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
-function Sidebar({ active, onNav, profile, isPro, onUpgrade, onLogout }: {
+function Sidebar({ active, onNav, profile, isPro, onUpgrade, onLogout, jobCount }: {
   active: NavId; onNav: (id: NavId) => void
-  profile: UserProfile; isPro: boolean; onUpgrade: () => void; onLogout: () => void
+  profile: UserProfile; isPro: boolean; onUpgrade: () => void; onLogout: () => void; jobCount?: number
 }) {
   const [showPopup, setShowPopup] = useState(false)
   const router = useRouter()
@@ -142,7 +164,7 @@ function Sidebar({ active, onNav, profile, isPro, onUpgrade, onLogout }: {
               <span style={{ fontSize: 14, width: 18, textAlign: 'center', flexShrink: 0 }}>{icon}</span>
               <span style={{ flex: 1 }}>{label}</span>
               {badge && <span style={{ fontSize: 9, background: C.navy, color: C.navy3, padding: '2px 6px', borderRadius: 10, fontWeight: 700 }}>{badge}</span>}
-              {id === 'jobs' && !badge && <span style={{ fontSize: 10, background: 'rgba(27,46,107,0.5)', color: C.navy3, padding: '1px 6px', borderRadius: 10, fontWeight: 600 }}>23</span>}
+              {id === 'jobs' && !badge && jobCount != null && jobCount > 0 && <span style={{ fontSize: 10, background: 'rgba(27,46,107,0.5)', color: C.navy3, padding: '1px 6px', borderRadius: 10, fontWeight: 600 }}>{jobCount}</span>}
             </button>
           )
         })}
@@ -202,7 +224,7 @@ const MOCK_NOTIFS = [
   { id: '4', icon: '🔔', title: 'Jobbly Update', desc: 'Neue KI-Features: Lebenslauf-Builder & mehr', time: 'Vor 3 Tagen', read: true },
 ]
 
-function TopBar({ profile, isPro, onUpgrade, onNav, onSearch }: { profile: UserProfile; isPro: boolean; onUpgrade: () => void; onNav: (id: NavId) => void; onSearch: (term: string) => void }) {
+function TopBar({ profile, isPro, onUpgrade, onNav, onSearch, avatarUrl }: { profile: UserProfile; isPro: boolean; onUpgrade: () => void; onNav: (id: NavId) => void; onSearch: (term: string) => void; avatarUrl?: string }) {
   const supabase = createClient()
   const [search, setSearch] = useState('')
   const [showPopup, setShowPopup] = useState(false)
@@ -337,12 +359,14 @@ function TopBar({ profile, isPro, onUpgrade, onNav, onSearch }: { profile: UserP
         </div>
 
         <div
-          style={{ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: C.white, cursor: 'pointer', border: '2px solid rgba(99,102,241,0.5)', position: 'relative' }}
+          style={{ width: 36, height: 36, borderRadius: '50%', background: avatarUrl ? 'transparent' : 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: C.white, cursor: 'pointer', border: '2px solid rgba(99,102,241,0.5)', position: 'relative', overflow: 'hidden' }}
           onMouseEnter={() => setShowPopup(true)}
           onMouseLeave={() => setShowPopup(false)}
           onClick={() => { setShowPopup(false); onNav('profile') }}
         >
-          {initials}
+          {avatarUrl
+            ? <img src={avatarUrl} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            : initials}
           {showPopup && <AvatarPopup profile={profile} isPro={isPro} onNavigate={() => { setShowPopup(false); onNav('profile') }} side="top" />}
         </div>
       </div>
@@ -701,48 +725,77 @@ function RightSidebar({ applications, profile, onNav }: { applications: Applicat
   )
 }
 
-// ── Section: Jobs finden ──────────────────────────────────────────────────────
-function JobsSection({ jobs, isPro, onSelect, onNeedPro, initialSearch }: { jobs: ReturnType<typeof makeMockJobs>; isPro: boolean; onSelect: (j: ReturnType<typeof makeMockJobs>[0]) => void; onNeedPro: () => void; initialSearch?: string }) {
-  const [search, setSearch] = useState(initialSearch || '')
+// ── Section: Jobs finden (live API) ──────────────────────────────────────────
+function JobsSection({ isPro, onSelect, onNeedPro, initialSearch }: { isPro: boolean; onSelect: (j: ReturnType<typeof makeMockJobs>[0]) => void; onNeedPro: () => void; initialSearch?: string }) {
+  const [search, setSearch]     = useState(initialSearch || '')
   const [location, setLocation] = useState('')
   const [workType, setWorkType] = useState('')
-  const [minMatch, setMinMatch] = useState(0)
+  const [jobs, setJobs]         = useState<ReturnType<typeof makeMockJobs>>([])
+  const [loading, setLoading]   = useState(false)
+  const [apiError, setApiError] = useState('')
+  const [searched, setSearched] = useState(false)
 
-  const filtered = jobs.filter(j => {
-    if (search && !j.title.toLowerCase().includes(search.toLowerCase()) && !j.company.toLowerCase().includes(search.toLowerCase())) return false
-    if (location && !j.location.toLowerCase().includes(location.toLowerCase())) return false
-    if (workType && !j.type.toLowerCase().includes(workType.toLowerCase())) return false
-    if (j.match < minMatch) return false
-    return true
-  })
+  const inSt: React.CSSProperties = { padding: '9px 14px', borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.04)', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none', width: '100%' }
+  const selSt: React.CSSProperties = { ...inSt, background: '#0D1117', cursor: 'pointer' }
+
+  async function doSearch() {
+    setLoading(true); setApiError(''); setSearched(true)
+    try {
+      const params = new URLSearchParams()
+      if (search) params.set('q', search)
+      if (location) params.set('location', location)
+      if (workType) params.set('workType', workType)
+      const res  = await fetch(`/api/jobs/search?${params}`)
+      const data = await res.json()
+      if (data.error && !data.jobs?.length) { setApiError(data.error); setJobs([]); return }
+      setJobs((data.jobs as RealJob[] || []).map(adaptJob))
+    } catch { setApiError('Stellensuche vorübergehend nicht verfügbar') }
+    finally { setLoading(false) }
+  }
+
+  // Auto-search on first render with initial search term
+  useEffect(() => { doSearch() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const filtered = workType ? jobs.filter(j => j.type.toLowerCase().includes(workType.toLowerCase())) : jobs
 
   return (
     <div>
       <h2 style={{ fontSize: 22, fontWeight: 700, color: C.white, marginBottom: 8 }}>Jobs finden</h2>
-      <p style={{ fontSize: 13, color: C.mid, marginBottom: 20 }}>{jobs.length} passende Jobs für dein Profil</p>
+      <p style={{ fontSize: 13, color: C.mid, marginBottom: 20 }}>{searched && !loading ? `${jobs.length} Jobs gefunden` : 'Echte Jobs aus Europa & DACH'}</p>
       {/* Filters */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 10, marginBottom: 20 }}>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Jobtitel, Unternehmen…" style={{ padding: '9px 14px', borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.04)', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none' }} />
-        <input value={location} onChange={e => setLocation(e.target.value)} placeholder="Stadt, Region…" style={{ padding: '9px 14px', borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.04)', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none' }} />
-        <select value={workType} onChange={e => setWorkType(e.target.value)} style={{ padding: '9px 14px', borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: '#0D1117', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none', cursor: 'pointer' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 10, marginBottom: 20, alignItems: 'end' }}>
+        <input value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && doSearch()} placeholder="Jobtitel, Keywords…" style={inSt} />
+        <input value={location} onChange={e => setLocation(e.target.value)} onKeyDown={e => e.key === 'Enter' && doSearch()} placeholder="Stadt, Region…" style={inSt} />
+        <select value={workType} onChange={e => setWorkType(e.target.value)} style={selSt}>
           <option value="">Alle Modelle</option>
           <option value="Remote">Remote</option>
           <option value="Hybrid">Hybrid</option>
           <option value="Vor Ort">Vor Ort</option>
         </select>
-        <select value={String(minMatch)} onChange={e => setMinMatch(Number(e.target.value))} style={{ padding: '9px 14px', borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: '#0D1117', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none', cursor: 'pointer' }}>
-          <option value="0">Alle Matches</option>
-          <option value="70">70%+</option>
-          <option value="80">80%+</option>
-          <option value="90">90%+</option>
-        </select>
+        <button onClick={doSearch} disabled={loading}
+          style={{ padding: '9px 20px', borderRadius: 9, background: C.navy, color: C.white, border: 'none', cursor: loading ? 'wait' : 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>
+          {loading ? '⏳' : '🔍 Suchen'}
+        </button>
       </div>
-      {filtered.length === 0 ? (
+      {loading && (
+        <div style={{ textAlign: 'center', padding: '3rem', color: C.mid }}>
+          <div style={{ fontSize: 32, marginBottom: 10 }}>⏳</div>
+          <div style={{ fontSize: 14 }}>Jobs werden geladen…</div>
+        </div>
+      )}
+      {!loading && apiError && (
+        <div style={{ textAlign: 'center', padding: '3rem', color: '#f87171', border: `0.5px solid rgba(248,113,113,0.2)`, borderRadius: 12 }}>
+          <div style={{ fontSize: 32, marginBottom: 10 }}>⚠️</div>
+          <div style={{ fontSize: 14 }}>{apiError}</div>
+        </div>
+      )}
+      {!loading && !apiError && filtered.length === 0 && searched && (
         <div style={{ textAlign: 'center', padding: '3rem', color: C.mid, border: `0.5px solid ${C.border}`, borderRadius: 12 }}>
           <div style={{ fontSize: 32, marginBottom: 10 }}>🔍</div>
-          <div style={{ fontSize: 14 }}>Keine Jobs gefunden. Ändere deine Filter.</div>
+          <div style={{ fontSize: 14 }}>Keine Jobs gefunden. Andere Keywords probieren.</div>
         </div>
-      ) : filtered.map(job => (
+      )}
+      {!loading && !apiError && filtered.map(job => (
         <JobCard key={job.id} job={job} onClick={() => { if (!isPro) { onNeedPro(); return }; onSelect(job) }} />
       ))}
     </div>
@@ -1418,8 +1471,18 @@ function LetterSection({ profile, isPro, onNeedPro }: { profile: UserProfile; is
   )
 }
 
+// ── Profile Block wrapper — defined at module level to prevent remount on re-render ──
+function Block({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div style={{ marginBottom: 16, padding: '20px 22px', borderRadius: 14, border: `0.5px solid ${C.border}`, background: 'rgba(255,255,255,0.01)' }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: C.white, marginBottom: 16, paddingBottom: 12, borderBottom: `0.5px solid ${C.border}` }}>{title}</div>
+      {children}
+    </div>
+  )
+}
+
 // ── Section: Meine Daten ──────────────────────────────────────────────────────
-function ProfileSection({ profile }: { profile: UserProfile }) {
+function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPhotoUpdate?: (url: string) => void }) {
   const supabase = createClient()
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -1431,7 +1494,7 @@ function ProfileSection({ profile }: { profile: UserProfile }) {
   const [photoUploading, setPhotoUploading] = useState(false)
 
   const p = profile as UserProfile & Record<string, string | number | boolean>
-  const existingAvatar = String(p.avatar_url || '')
+  const existingAvatar = String(p.photo_url || p.avatar_url || '')
 
   const [form, setForm] = useState({
     first_name: profile.first_name || '',
@@ -1469,26 +1532,36 @@ function ProfileSection({ profile }: { profile: UserProfile }) {
 
   async function deletePhoto() {
     setPhotoPreview(null); setPhotoFile(null)
-    await supabase.from('profiles').update({ avatar_url: null } as Record<string, unknown>).eq('id', profile.id)
+    await supabase.from('profiles').update({ photo_url: null, avatar_url: null } as Record<string, unknown>).eq('id', profile.id)
+    if (onPhotoUpdate) onPhotoUpdate('')
   }
 
   async function save() {
     setSaving(true); setSaved(false)
     try {
-      let avatarUrl = existingAvatar
+      let finalPhotoUrl = existingAvatar
       if (photoFile) {
         setPhotoUploading(true)
         const ext = photoFile.name.split('.').pop() || 'jpg'
-        const { data: uploadData } = await supabase.storage.from('avatars').upload(`${profile.id}/avatar.${ext}`, photoFile, { upsert: true })
-        if (uploadData) {
+        const path = `${profile.id}/avatar.${ext}`
+        const { data: uploadData, error: uploadErr } = await supabase.storage
+          .from('avatars')
+          .upload(path, photoFile, { upsert: true })
+        if (uploadErr) {
+          console.error('Photo upload error:', uploadErr.message)
+          // Still proceed with saving other form fields
+        } else if (uploadData) {
           const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(uploadData.path)
-          avatarUrl = urlData.publicUrl
+          // Append cache-bust so browser re-fetches updated avatar
+          finalPhotoUrl = `${urlData.publicUrl}?t=${Date.now()}`
         }
         setPhotoUploading(false)
       }
       await supabase.from('profiles').update({
-        ...form, ...prefs, ...notifications, ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
+        ...form, ...prefs, ...notifications,
+        ...(finalPhotoUrl ? { photo_url: finalPhotoUrl, avatar_url: finalPhotoUrl } : {}),
       } as Record<string, unknown>).eq('id', profile.id)
+      if (finalPhotoUrl && photoFile && onPhotoUpdate) onPhotoUpdate(finalPhotoUrl)
       setSaved(true); setTimeout(() => setSaved(false), 3000)
     } finally { setSaving(false); setPhotoUploading(false) }
   }
@@ -1525,13 +1598,6 @@ function ProfileSection({ profile }: { profile: UserProfile }) {
         onChange={e => setForm(prev => ({ ...prev, [key]: e.target.value }))}
         placeholder={placeholder} disabled={disabled}
         style={disabled ? inDisabledStyle : inStyle} />
-    </div>
-  )
-
-  const Block = ({ title, children }: { title: string; children: React.ReactNode }) => (
-    <div style={{ marginBottom: 16, padding: '20px 22px', borderRadius: 14, border: `0.5px solid ${C.border}`, background: 'rgba(255,255,255,0.01)' }}>
-      <div style={{ fontSize: 13, fontWeight: 700, color: C.white, marginBottom: 16, paddingBottom: 12, borderBottom: `0.5px solid ${C.border}` }}>{title}</div>
-      {children}
     </div>
   )
 
@@ -2285,6 +2351,8 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
   const [showUpgrade, setShowUpgrade] = useState(false)
   const [globalSearch, setGlobalSearch] = useState('')
   const [globalToast, setGlobalToast] = useState<string>('')
+  const p0 = profile as UserProfile & Record<string, unknown>
+  const [avatarUrl, setAvatarUrl] = useState<string>(String(p0.photo_url || p0.avatar_url || ''))
   const supabase = createClient()
   const router = useRouter()
   const isPro = !!profile.is_pro
@@ -2307,7 +2375,15 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
   }, [globalToast])
 
   const mockJobs = useMemo(() => makeMockJobs(), [])
+  const [dashJobs, setDashJobs] = useState<ReturnType<typeof makeMockJobs>>([])
   const showOnboarding = !profile.first_name
+
+  // Fetch real jobs for dashboard home "Top Job Matches" on mount
+  useEffect(() => {
+    fetch('/api/jobs/search').then(r => r.json()).then(data => {
+      if (data.jobs) setDashJobs((data.jobs as RealJob[]).slice(0, 3).map(adaptJob))
+    }).catch(() => setDashJobs(mockJobs.slice(0, 3)))
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -2322,11 +2398,11 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
 
   function renderContent() {
     switch (activeNav) {
-      case 'jobs': return <JobsSection jobs={mockJobs} isPro={isPro} onSelect={j => setSelectedJob(j)} onNeedPro={() => setShowUpgrade(true)} initialSearch={globalSearch} />
+      case 'jobs': return <JobsSection isPro={isPro} onSelect={j => setSelectedJob(j)} onNeedPro={() => setShowUpgrade(true)} initialSearch={globalSearch} />
       case 'applications': return <ApplicationsSection applications={applications} profile={profile} />
       case 'cv': { router.push('/dashboard/lebenslauf'); return null }
       case 'letter': { router.push('/dashboard/anschreiben'); return null }
-      case 'profile': return <ProfileSection profile={profile} />
+      case 'profile': return <ProfileSection profile={profile} onPhotoUpdate={url => setAvatarUrl(url)} />
       case 'stats': return <StatsSection applications={applications} />
       case 'courses': return <CoursesSection />
       case 'settings': return <SettingsSection profile={profile} isPro={isPro} onUpgrade={() => setShowUpgrade(true)} />
@@ -2367,7 +2443,7 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
           </div>
 
           <div style={{ display: 'flex', gap: 14, marginBottom: 32 }}>
-            <StatCard icon="💼" value="23" label="Passende Jobs" sub="+5 heute" subColor={C.success} onClick={() => setActiveNav('jobs')} />
+            <StatCard icon="💼" value={String(dashJobs.length || 0)} label="Passende Jobs" sub="Aktuell" subColor={C.success} onClick={() => setActiveNav('jobs')} />
             <StatCard icon="📊" value="85%" label="Profil Match" sub="Sehr gut" subColor={C.success} onClick={() => setActiveNav('profile')} />
             <StatCard icon="📋" value={String(applications.length)} label="Bewerbungen" sub="Insgesamt" subColor={C.mid} onClick={() => setActiveNav('applications')} />
             <StatCard icon="⭐" value="3" label="Einladungen" sub="Letzte 30 Tage" subColor={C.success} onClick={() => setActiveNav('applications')} />
@@ -2389,7 +2465,7 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
               <div style={{ fontSize: 16, fontWeight: 700, color: C.white }}>Top Job Matches für dich</div>
               <span style={{ fontSize: 13, color: C.navy3, cursor: 'pointer', fontWeight: 500 }} onClick={() => setActiveNav('jobs')}>Alle anzeigen</span>
             </div>
-            {mockJobs.slice(0, 3).map(job => (
+            {dashJobs.slice(0, 3).map(job => (
               <JobCard key={job.id} job={job} onClick={() => {
                 if (!isPro) { setShowUpgrade(true); return }
                 setSelectedJob(job)
@@ -2417,10 +2493,10 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
       {showOnboarding && <Onboarding profile={profile} onComplete={() => router.refresh()} />}
 
       <div style={{ display: 'flex', height: '100vh', background: C.bg, overflow: 'hidden' }}>
-        <Sidebar active={activeNav} onNav={handleNav} profile={profile} isPro={isPro} onUpgrade={() => setShowUpgrade(true)} onLogout={handleLogout} />
+        <Sidebar active={activeNav} onNav={handleNav} profile={profile} isPro={isPro} onUpgrade={() => setShowUpgrade(true)} onLogout={handleLogout} jobCount={dashJobs.length} />
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-          <TopBar profile={profile} isPro={isPro} onUpgrade={() => setShowUpgrade(true)} onNav={handleNav} onSearch={term => { setGlobalSearch(term); setActiveNav('jobs') }} />
+          <TopBar profile={profile} isPro={isPro} onUpgrade={() => setShowUpgrade(true)} onNav={handleNav} onSearch={term => { setGlobalSearch(term); setActiveNav('jobs') }} avatarUrl={avatarUrl} />
 
           <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
             <main style={{ flex: 1, overflowY: 'auto', padding: '28px 32px' }}>

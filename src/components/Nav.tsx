@@ -17,7 +17,7 @@ interface Props {
 export default function Nav({ lang, onLangChange, user, onSignIn, onRegister, onLogout }: Props) {
   return (
     <div className="nav">
-      <JLogo size={28} href={user ? '/dashboard' : '/'} />
+      <JLogo size={28} href="/" />
 
       <div className="nav-right">
         <select className="lang-sel" value={lang} onChange={(e) => onLangChange(e.target.value as Lang)}>
@@ -31,10 +31,10 @@ export default function Nav({ lang, onLangChange, user, onSignIn, onRegister, on
 
         {user ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Link href="/dashboard" style={{ fontSize: 13, color: 'var(--mid)', textDecoration: 'none' }}>
-              {user.first_name || user.email}
-            </Link>
             {user.is_pro && <span className="pro-pill">PRO</span>}
+            <Link href="/dashboard" style={{ fontSize: 13, fontWeight: 600, color: '#fff', textDecoration: 'none', padding: '7px 16px', borderRadius: 8, background: 'var(--navy)', border: '1px solid rgba(147,175,253,0.25)' }}>
+              Zum Dashboard →
+            </Link>
             <button className="nbtn" onClick={onLogout}>Sign out</button>
           </div>
         ) : (
