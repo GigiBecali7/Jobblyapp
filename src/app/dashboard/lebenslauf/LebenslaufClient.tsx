@@ -5,6 +5,7 @@ import type { CVDesign, FontFamily, FontSize, LineSpacing, CVProps, CVSections }
 import { DEFAULT_SECTIONS } from '@/components/cv/types'
 import { getDashT, getCurrentLang } from '@/lib/dashboard-i18n'
 import { useIsMobile } from '@/lib/useIsMobile'
+import { trackEvent } from '@/components/MetaPixel'
 
 const NordicMinimal  = dynamic(() => import('@/components/cv/NordicMinimal'),  { ssr: false })
 const NordicSidebar  = dynamic(() => import('@/components/cv/NordicSidebar'),  { ssr: false })
@@ -370,6 +371,7 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
         if (json.cvData.experience && !expEntries.some(e => e.description.length > 20)) {
           setExpEntries(prev => prev.map((e, i) => i === 0 ? { ...e, description: json.cvData.experience } : e))
         }
+        trackEvent('StartTrial')
         showToast('KI-Inhalt generiert! ✓')
       }
     } catch { showToast(t.toastGenerateError, false) }

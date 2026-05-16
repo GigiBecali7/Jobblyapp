@@ -4,6 +4,7 @@ import React, { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { UserProfile } from '@/lib/types'
+import { trackEvent } from '@/components/MetaPixel'
 
 const C = {
   bg: '#0A0A0F',
@@ -258,6 +259,7 @@ export default function OnboardingClient({ profile }: Props) {
         .update({ onboarding_completed: true } as Record<string, unknown>)
         .eq('id', profile.id)
       if (error) console.error('finishOnboarding error:', error)
+      trackEvent('CompleteRegistration')
       router.push('/dashboard')
     } catch (err) {
       console.error('finishOnboarding exception:', err)

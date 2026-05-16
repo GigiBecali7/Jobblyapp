@@ -8,6 +8,7 @@ import { JMark } from '@/components/JLogo'
 import type { UserProfile, Application } from '@/lib/types'
 import { getProfileCompleteness } from '@/lib/profileCompleteness'
 import { useIsMobile } from '@/lib/useIsMobile'
+import { trackEvent } from '@/components/MetaPixel'
 
 interface Props {
   profile: UserProfile
@@ -70,6 +71,11 @@ function makeMockJobs() {
   const matches = [92, 88, 80, 74, 68, 85, 77]
   const skillSets = [['Product Management', 'Strategie', 'Kommunikation'], ['Analyse', 'Daten', 'Excel'], ['Beratung', 'Strategie', 'Präsentation'], ['Marketing', 'Social Media', 'Content'], ['Koordination', 'Teamführung', 'Reporting'], ['React', 'TypeScript', 'Node.js'], ['Python', 'ML', 'Statistics']]
   const times = ['Vor 2 Stunden', 'Vor 5 Stunden', 'Vor 1 Tag', 'Vor 2 Tagen', 'Vor 3 Tagen', 'Gerade eben', 'Vor 4 Stunden']
+  // Mock contact emails — alternating to demo both Flow A and Flow B
+  const contactEmails = [
+    'bewerbung@techvision.de', null, 'jobs@digitalsolutions.at',
+    null, 'careers@karrierehub.de', null, 'apply@viennafintech.at',
+  ]
   return companies.map((c, i) => ({
     id: String(i + 1), company: c.name, initials: c.init, color: c.color,
     title: titles[i], location: `${locations[i]}, Deutschland/Österreich`, type: types[i],
@@ -77,6 +83,7 @@ function makeMockJobs() {
     match: matches[i], skills: skillSets[i], posted: times[i],
     description: `Wir suchen einen engagierten ${titles[i].replace(' (m/w/d)', '')} für unser wachsendes Team bei ${c.name}. Sie bringen Erfahrung mit und arbeiten gerne im Team.`,
     industry: i < 2 ? 'tech' : i < 4 ? 'marketing' : 'other',
+    contactEmail: contactEmails[i] as string | null,
   }))
 }
 
@@ -106,6 +113,19 @@ interface RealJob {
   id: string; title: string; company: string; location: string; type: string
   salary: string; description: string; url: string; postedAt: string
   source: string; matchScore: number; skills: string[]
+  email?: string; contact_email?: string; apply_email?: string
+}
+
+const EMAIL_SKIP = /^(noreply|no-reply|support|info|hello|contact|newsletter|marketing|donotreply)@/i
+
+function extractContactEmail(job: RealJob): string | null {
+  // Check API fields first
+  const direct = job.email || job.contact_email || job.apply_email
+  if (direct && !EMAIL_SKIP.test(direct)) return direct
+  // Scan description
+  const matches = (job.description || '').match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g)
+  const found = matches?.find(e => !EMAIL_SKIP.test(e)) || null
+  return found
 }
 
 function adaptJob(j: RealJob): ReturnType<typeof makeMockJobs>[0] {
@@ -120,6 +140,7 @@ function adaptJob(j: RealJob): ReturnType<typeof makeMockJobs>[0] {
     salary: j.salary || 'Gehalt nicht angegeben',
     match: j.matchScore, skills: j.skills, posted: dateStr,
     description: j.description, industry: '',
+    contactEmail: extractContactEmail(j),
   }
 }
 
@@ -501,6 +522,7 @@ function setBookmarkPersisted(id: string, val: boolean) {
 function JobCard({ job, onClick, compact }: { job: ReturnType<typeof makeMockJobs>[0]; onClick: () => void; compact?: boolean }) {
   const [bookmarked, setBookmarked] = useState(() => typeof window !== 'undefined' ? getBookmarks().includes(job.id) : false)
   const matchColor = job.match >= 85 ? C.success : job.match >= 70 ? C.amber : C.mid
+  const hasDirectEmail = !!(job as ReturnType<typeof makeMockJobs>[0] & { contactEmail?: string | null }).contactEmail
 
   return (
     <div
@@ -531,8 +553,13 @@ function JobCard({ job, onClick, compact }: { job: ReturnType<typeof makeMockJob
         </div>
       </div>
       {!compact && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, paddingTop: 8, borderTop: `0.5px solid ${C.border}` }}>
-          <span style={{ fontSize: 11, color: C.mid }}>Gehalt: {job.salary}</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 8, borderTop: `0.5px solid ${C.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 11, color: C.mid }}>Gehalt: {job.salary}</span>
+            <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 10, fontWeight: 700, background: hasDirectEmail ? 'rgba(27,46,107,0.25)' : 'rgba(255,255,255,0.05)', color: hasDirectEmail ? '#93AFFD' : C.mid, border: `0.5px solid ${hasDirectEmail ? 'rgba(27,46,107,0.4)' : 'rgba(255,255,255,0.08)'}` }}>
+              {hasDirectEmail ? '📧 Direkt' : '🌐 Portal'}
+            </span>
+          </div>
           <span style={{ fontSize: 11, color: C.mid }}>{job.posted}</span>
         </div>
       )}
@@ -829,6 +856,7 @@ function JobsSection({ isPro, onSelect, onNeedPro, initialSearch }: { isPro: boo
 
   async function doSearch() {
     setLoading(true); setApiError(''); setSearched(true)
+    if (search) trackEvent('Search', { search_string: search })
     try {
       const params = new URLSearchParams()
       if (search) params.set('q', search)
@@ -2422,6 +2450,7 @@ function UpgradeModal({ onClose, onUpgrade }: { onClose: () => void; onUpgrade: 
   const [loading, setLoading] = useState(false)
   async function handleUpgrade() {
     setLoading(true)
+    trackEvent('InitiateCheckout', { value: 9.99, currency: 'EUR' })
     try {
       const res = await fetch('/api/stripe/checkout', { method: 'POST' })
       const data = await res.json()
@@ -2466,9 +2495,13 @@ function ApplicationModal({
   onSuccess: () => void
 }) {
   const MAX_FREE_APPS = 5
+  // Auto-detect email from job data
+  const jobWithEmail = job as ReturnType<typeof makeMockJobs>[0] & { contactEmail?: string | null }
+  const detectedEmail = jobWithEmail.contactEmail || null
+
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1)
-  const [flowType, setFlowType] = useState<'email' | 'portal'>('portal')
-  const [recipientEmail, setRecipientEmail] = useState('')
+  const [flowType, setFlowType] = useState<'email' | 'portal'>(detectedEmail ? 'email' : 'portal')
+  const [recipientEmail, setRecipientEmail] = useState(detectedEmail || '')
   const [cvs, setCvs] = useState<SavedCVMeta[]>([])
   const [letters, setLetters] = useState<CoverLetterMeta[]>([])
   const [selectedCvId, setSelectedCvId] = useState<string>('')
@@ -2525,6 +2558,7 @@ function ApplicationModal({
           applied_at: new Date().toISOString(),
         })
       }
+      trackEvent('SubmitApplication')
       showToast('Bewerbung erfolgreich! ✓')
       setTimeout(() => { onSuccess(); onClose() }, 1800)
     } catch { showToast('Fehler beim Senden', false) }
@@ -2582,11 +2616,19 @@ function ApplicationModal({
           {step === 1 && (
             <div>
               <div style={{ fontSize: 15, fontWeight: 700, color: C.white, marginBottom: 6 }}>Bewerbungsart wählen</div>
-              <div style={{ fontSize: 13, color: C.mid, marginBottom: 20 }}>Wie möchtest du dich bewerben?</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
+              {detectedEmail ? (
+                <div style={{ padding: '10px 14px', borderRadius: 9, background: 'rgba(27,46,107,0.15)', border: '0.5px solid rgba(27,46,107,0.35)', marginBottom: 16, fontSize: 12, color: '#93AFFD', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  📧 <strong>Direkte Bewerbung per E-Mail möglich</strong>
+                </div>
+              ) : (
+                <div style={{ padding: '10px 14px', borderRadius: 9, background: 'rgba(255,255,255,0.04)', border: '0.5px solid rgba(255,255,255,0.1)', marginBottom: 16, fontSize: 12, color: C.mid, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  🌐 <span>Bewerbung über Portal — keine direkte E-Mail gefunden</span>
+                </div>
+              )}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
                 {([
-                  ['email', '📧', 'Per E-Mail', 'Jobbly sendet deine Bewerbung direkt an das Unternehmen'],
-                  ['portal', '🌐', 'Bewerbungsportal', 'Du bewirbst dich selbst über die Unternehmenswebsite'],
+                  ['email', '📧', 'Per E-Mail', 'Jobbly sendet deine Bewerbung direkt'],
+                  ['portal', '🌐', 'Bewerbungsportal', 'Du bewirbst dich über die Website'],
                 ] as const).map(([type, icon, label, desc]) => (
                   <div key={type} onClick={() => setFlowType(type)} style={selCard(flowType === type)}>
                     <div style={{ fontSize: 22, marginBottom: 6 }}>{icon}</div>
@@ -2597,12 +2639,19 @@ function ApplicationModal({
               </div>
               {flowType === 'email' && (
                 <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: C.mid, marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: 0.8 }}>Empfänger-E-Mail *</label>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: C.mid, marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: 0.8 }}>
+                    {detectedEmail ? 'Erkannte E-Mail (editierbar)' : 'Empfänger-E-Mail *'}
+                  </label>
                   <input
                     value={recipientEmail} onChange={e => setRecipientEmail(e.target.value)}
                     placeholder="bewerbung@unternehmen.de"
-                    style={{ width: '100%', padding: '10px 14px', borderRadius: 9, border: '1px solid rgba(255,255,255,0.1)', background: '#0d0d1a', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none', boxSizing: 'border-box' as const }}
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: 9, border: `1px solid ${detectedEmail ? 'rgba(27,46,107,0.5)' : 'rgba(255,255,255,0.1)'}`, background: '#0d0d1a', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none', boxSizing: 'border-box' as const }}
                   />
+                  {detectedEmail && (
+                    <div style={{ fontSize: 11, color: C.mid, marginTop: 4 }}>
+                      Bewerbung wird gesendet an: <span style={{ color: '#93AFFD' }}>{recipientEmail || detectedEmail}</span>
+                    </div>
+                  )}
                 </div>
               )}
               <button
@@ -2753,6 +2802,7 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
   useEffect(() => {
     if (upgradeStatus === 'success') {
       setGlobalToast('Willkommen bei Jobbly Pro! 🎉 Alle Features sind jetzt freigeschaltet.')
+      trackEvent('Purchase', { value: 9.99, currency: 'EUR', content_name: 'Jobbly Pro' })
       window.history.replaceState({}, '', '/dashboard')
     } else if (upgradeStatus === 'cancelled') {
       setGlobalToast('Upgrade abgebrochen — du kannst jederzeit upgraden.')
@@ -2791,7 +2841,7 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
   function renderContent(mob?: boolean) {
     const m = mob ?? isMobile
     switch (activeNav) {
-      case 'jobs': return <JobsSection isPro={isPro} onSelect={j => setSelectedJob(j)} onNeedPro={() => setShowUpgrade(true)} initialSearch={globalSearch} />
+      case 'jobs': return <JobsSection isPro={isPro} onSelect={j => { trackEvent('ViewContent', { content_name: j.title, content_category: 'Job', content_type: 'product' }); setSelectedJob(j) }} onNeedPro={() => setShowUpgrade(true)} initialSearch={globalSearch} />
       case 'applications': return <ApplicationsSection applications={applications} profile={profile} />
       case 'cv': { router.push('/dashboard/lebenslauf'); return null }
       case 'letter': { router.push('/dashboard/anschreiben'); return null }

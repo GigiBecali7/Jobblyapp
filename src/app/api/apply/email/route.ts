@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { Resend } from 'resend'
+import { sendApplicationConfirmationEmail } from '@/lib/email'
 
 const MAX_FREE_APPLICATIONS = 5
 
@@ -112,6 +113,14 @@ ${clRow.content}
     if (appErr) {
       console.error('Failed to record application:', appErr)
       // Don't block if DB insert fails after email sent
+    }
+
+    // Send confirmation email to the applicant
+    if (senderEmail) {
+      const method = body.coverLetterId ? 'email' : 'portal'
+      sendApplicationConfirmationEmail(
+        user.id, senderEmail, firstName, jobTitle, company, method
+      ).catch(e => console.error('Application confirmation email failed:', e))
     }
 
     return NextResponse.json({ ok: true, applicationId: app?.id })

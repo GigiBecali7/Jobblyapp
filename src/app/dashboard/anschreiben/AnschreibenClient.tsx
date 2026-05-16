@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { CVDesign } from '@/components/cv/types'
 import { getDashT, getCurrentLang } from '@/lib/dashboard-i18n'
 import { useIsMobile } from '@/lib/useIsMobile'
+import { trackEvent } from '@/components/MetaPixel'
 
 const MAX_FREE_EDITS = 5
 
@@ -176,7 +177,7 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
         body: JSON.stringify({ jobTitle, company, userProfile, lang }),
       })
       const json = await res.json()
-      if (json.coverLetter) { setEditableText(json.coverLetter); setView('preview') }
+      if (json.coverLetter) { setEditableText(json.coverLetter); setView('preview'); trackEvent('StartTrial') }
       else { console.error('Generate error detail:', json.detail || json.error); showToast(t.toastGenerateError, false) }
     } catch (e) { console.error('Generate fetch error:', e); showToast(t.toastGenerateError, false) }
     finally { setGenerating(false) }
