@@ -141,6 +141,7 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
   const [saving, setSaving]         = useState(false)
   const [exporting, setExporting]   = useState(false)
   const [applying, setApplying]     = useState(false)
+  const [showApplyModal, setShowApplyModal] = useState(false)
   const [toast, setToast]           = useState<{ msg: string; ok: boolean } | null>(null)
   const [errors, setErrors]         = useState<{ job?: string; company?: string }>({})
 
@@ -368,8 +369,8 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
                   {exporting ? '...' : t.letterPDF}
                 </button>
                 <button onClick={handleExportWord} style={btnPrimary('#2563eb')}>{t.letterWord}</button>
-                <button onClick={handleApply} disabled={applying} style={{ ...btnPrimary('#10b981'), opacity: applying ? 0.7 : 1 }}>
-                  {applying ? 'Sende...' : t.letterApply}
+                <button onClick={() => setShowApplyModal(true)} style={btnPrimary('#10b981')}>
+                  {t.letterApply}
                 </button>
               </div>
             </div>
@@ -418,6 +419,78 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
           </div>
         )}
       </div>
+
+      {/* ══ BEWERBUNG BESTÄTIGEN MODAL ══════════════════════════════════════ */}
+      {showApplyModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', zIndex: 9000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+          onClick={e => { if (e.target === e.currentTarget) setShowApplyModal(false) }}>
+          <div style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 32, maxWidth: 680, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+              <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>Bewerbung bestätigen</h2>
+              <button onClick={() => setShowApplyModal(false)} style={{ background: 'none', border: 'none', color: C.mid, fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>×</button>
+            </div>
+
+            {/* Job info */}
+            <div style={{ backgroundColor: 'rgba(27,46,107,0.15)', border: `1px solid rgba(147,175,253,0.2)`, borderRadius: 10, padding: '12px 16px', marginBottom: 24 }}>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>{jobTitle}</div>
+              <div style={{ fontSize: 13, color: C.mid, marginTop: 2 }}>{company}</div>
+            </div>
+
+            {/* Design picker */}
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: C.mid, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 12 }}>Design wählen</div>
+              {!isPro && <div style={{ fontSize: 11, color: C.amber, marginBottom: 10 }}>Free-Plan: Nur Nordic Minimal verfügbar. <a href="/dashboard" style={{ color: C.navy3 }}>Upgrade zu Pro →</a></div>}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                {DESIGNS.map(d => {
+                  const locked = d.proOnly && !isPro
+                  const sel    = selectedDesign === d.id
+                  const cfg    = DESIGN_CFG[d.id]
+                  return (
+                    <button key={d.id}
+                      onClick={() => { if (locked) { showToast(t.toastProOnly, false); return } setSelectedDesign(d.id) }}
+                      style={{ position: 'relative', padding: '12px 10px', borderRadius: 10, border: `2px solid ${sel ? C.navy : 'rgba(255,255,255,0.1)'}`, backgroundColor: sel ? 'rgba(27,46,107,0.25)' : '#0d0d1a', cursor: locked ? 'default' : 'pointer', fontFamily: 'inherit', color: C.white, textAlign: 'center', opacity: locked ? 0.7 : 1 }}>
+                      {locked && (
+                        <div style={{ position: 'absolute', inset: 0, borderRadius: 9, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, fontSize: 11, color: C.amber, fontWeight: 700 }}>
+                          🔒 PRO
+                        </div>
+                      )}
+                      <div style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: cfg.headerBg, margin: '0 auto 6px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>{d.emoji}</div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: C.white }}>{d.label}</div>
+                      {sel && <div style={{ fontSize: 10, color: C.navy3, marginTop: 2 }}>✓</div>}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* A4 mini preview */}
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 12, color: C.mid, marginBottom: 8 }}>Vorschau</div>
+              <div style={{ display: 'flex', justifyContent: 'center', overflow: 'hidden', borderRadius: 8 }}>
+                <div style={{ transform: 'scale(0.55)', transformOrigin: 'top center', boxShadow: '0 4px 24px rgba(0,0,0,0.4)', flexShrink: 0, marginBottom: '-52%' }}>
+                  <CoverLetterA4 {...a4Props} />
+                </div>
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', paddingTop: 16, borderTop: `1px solid ${C.border}` }}>
+              <button onClick={handleExportPDF} disabled={exporting} style={{ ...btnPrimary('#ef4444'), flex: 1, opacity: exporting ? 0.7 : 1 }}>
+                {exporting ? '...' : '⬇ PDF'}
+              </button>
+              <button onClick={handleExportWord} style={{ ...btnPrimary('#2563eb'), flex: 1 }}>⬇ Word</button>
+              <button onClick={handleSave} disabled={saving} style={{ ...btnPrimary('#6366f1'), flex: 1, opacity: saving ? 0.7 : 1 }}>
+                {saving ? t.saving : t.letterSave}
+              </button>
+              <button onClick={() => { setShowApplyModal(false); handleApply() }} disabled={applying}
+                style={{ ...btnPrimary('#10b981'), flex: 2, opacity: applying ? 0.7 : 1, fontWeight: 700, fontSize: 15 }}>
+                {applying ? 'Sende...' : '🚀 ' + t.letterApply}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   )

@@ -4,7 +4,7 @@ import dynamic from 'next/dynamic'
 import type { CVDesign, FontFamily, FontSize, LineSpacing, CVProps, CVSections } from '@/components/cv/types'
 import { DEFAULT_SECTIONS } from '@/components/cv/types'
 import { createClient } from '@/lib/supabase/client'
-import { getDashT, getCurrentLang, getLangOptions } from '@/lib/dashboard-i18n'
+import { getDashT, getCurrentLang } from '@/lib/dashboard-i18n'
 
 const NordicMinimal  = dynamic(() => import('@/components/cv/NordicMinimal'),  { ssr: false })
 const NordicSidebar  = dynamic(() => import('@/components/cv/NordicSidebar'),  { ssr: false })
@@ -84,7 +84,7 @@ function serializeLangs(entries: LangEntry[]): string {
 
 function emptyExp(): ExpEntry  { return { title: '', company: '', period: '', description: '' } }
 function emptyEdu(): EduEntry  { return { degree: '', institution: '', period: '' } }
-function emptyLang(): LangEntry { return { language: 'Deutsch', level: '' } }
+function emptyLang(): LangEntry { return { language: '', level: '' } }
 
 function initFromProfile(profile: Record<string, unknown> | null): Omit<CVProps, 'experience' | 'education' | 'languages' | 'skills'> {
   const p = profile || {}
@@ -92,7 +92,7 @@ function initFromProfile(profile: Record<string, unknown> | null): Omit<CVProps,
     firstName: String(p.first_name || ''), lastName: String(p.last_name || ''),
     email: String(p.email || ''), phone: String(p.phone || ''),
     city: String(p.city || ''), linkedin: String(p.linkedin || ''),
-    photoUrl: String(p.photo || ''), position: String(p.position || ''),
+    photoUrl: String(p.avatar_url || p.photo_url || p.photo || ''), position: String(p.position || ''),
     profile: '', fontFamily: 'Inter', fontSize: 'medium', lineSpacing: 'normal',
   }
 }
@@ -269,6 +269,10 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
     setLangEntries(prev => prev.map((e, j) => j === i ? { ...e, [k]: v } : e))
   }
   function addLang() { setLangEntries(prev => [...prev, emptyLang()]) }
+  function isDupLang(name: string, idx: number) {
+    const n = name.trim().toLowerCase()
+    return n !== '' && langEntries.some((e, i) => i !== idx && e.language.trim().toLowerCase() === n)
+  }
   function removeLang(i: number) { if (langEntries.length > 1) setLangEntries(prev => prev.filter((_, j) => j !== i)) }
 
   // ── Validation ──
@@ -382,7 +386,6 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
     } catch { showToast(t.toastWordError, false) }
   }
 
-  const langOpts = getLangOptions(t)
   const levelOpts = [t.levelNative, t.levelFluent, t.levelAdvanced, t.levelIntermediate, t.levelBasic]
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -477,17 +480,17 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
                     const sel    = design === d.id
                     return (
                       <div key={d.id} onClick={() => { if (locked) { showToast(t.toastProOnly, false); return } setDesign(d.id) }}
-                        style={{ position: 'relative', backgroundColor: sel ? 'rgba(27,46,107,0.2)' : C.card, border: `1px solid ${sel ? d.accent : C.border}`, borderRadius: 12, padding: 20, cursor: 'pointer', boxShadow: sel ? `0 0 0 2px ${d.accent}44` : 'none', transition: 'all .15s' }}>
+                        style={{ position: 'relative', backgroundColor: sel ? 'rgba(27,46,107,0.25)' : '#0d0d1a', border: `2px solid ${sel ? '#1B2E6B' : 'rgba(255,255,255,0.08)'}`, borderRadius: 12, padding: 20, cursor: locked ? 'default' : 'pointer', boxShadow: sel ? '0 0 0 2px rgba(27,46,107,0.4)' : 'none', transition: 'all .15s' }}>
                         {locked && (
-                          <div style={{ position: 'absolute', inset: 0, borderRadius: 11, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, zIndex: 1 }}>
+                          <div style={{ position: 'absolute', inset: 0, borderRadius: 11, backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, zIndex: 1 }}>
                             <span style={{ fontSize: 22 }}>🔒</span>
                             <span style={{ backgroundColor: C.amber, color: '#000', fontSize: 10, fontWeight: 700, padding: '2px 10px', borderRadius: 20 }}>PRO</span>
                           </div>
                         )}
                         <div style={{ width: 44, height: 44, borderRadius: 10, backgroundColor: d.accent, marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>{d.emoji}</div>
-                        <div style={{ fontWeight: 700, fontSize: 14 }}>{d.label}</div>
-                        <div style={{ fontSize: 12, color: C.mid, marginTop: 4 }}>{d.desc}</div>
-                        {sel && !locked && <div style={{ marginTop: 8, fontSize: 12, color: d.accent, fontWeight: 600 }}>✓ Ausgewählt</div>}
+                        <div style={{ fontWeight: 700, fontSize: 14, color: '#fff' }}>{d.label}</div>
+                        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', marginTop: 4 }}>{d.desc}</div>
+                        {sel && !locked && <div style={{ marginTop: 8, fontSize: 12, color: '#93AFFD', fontWeight: 600 }}>✓ Ausgewählt</div>}
                       </div>
                     )
                   })}
@@ -617,24 +620,32 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
 
                 {/* ── Languages ── */}
                 <Section title={t.languages}>
-                  {langEntries.map((e, i) => (
-                    <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 10, marginBottom: 10, alignItems: 'end' }}>
-                      <div>
-                        {i === 0 && <label style={labelStyle}>{t.language}</label>}
-                        <select value={e.language} onChange={ev => updLang(i, 'language', ev.target.value)} style={selStyle}>
-                          {langOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                        </select>
+                  {langEntries.map((e, i) => {
+                    const dup = isDupLang(e.language, i)
+                    return (
+                      <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 10, marginBottom: 10, alignItems: 'end' }}>
+                        <div>
+                          {i === 0 && <label style={labelStyle}>{t.language}</label>}
+                          <input
+                            type="text"
+                            value={e.language}
+                            onChange={ev => updLang(i, 'language', ev.target.value)}
+                            placeholder="z.B. Deutsch"
+                            style={{ ...inStyle, borderColor: dup ? C.error : 'rgba(255,255,255,0.1)' }}
+                          />
+                          {dup && <div style={{ fontSize: 11, color: C.error, marginTop: 3 }}>Sprache bereits vorhanden</div>}
+                        </div>
+                        <div>
+                          {i === 0 && <label style={labelStyle}>{t.level}</label>}
+                          <select value={e.level} onChange={ev => updLang(i, 'level', ev.target.value)} style={selStyle}>
+                            <option value="">—</option>
+                            {levelOpts.map(l => <option key={l} value={l}>{l}</option>)}
+                          </select>
+                        </div>
+                        <button onClick={() => removeLang(i)} style={{ ...btnDanger, height: 40, alignSelf: 'flex-end' }} disabled={langEntries.length === 1}>×</button>
                       </div>
-                      <div>
-                        {i === 0 && <label style={labelStyle}>{t.level}</label>}
-                        <select value={e.level} onChange={ev => updLang(i, 'level', ev.target.value)} style={selStyle}>
-                          <option value="">—</option>
-                          {levelOpts.map(l => <option key={l} value={l}>{l}</option>)}
-                        </select>
-                      </div>
-                      <button onClick={() => removeLang(i)} style={{ ...btnDanger, height: 40, alignSelf: 'flex-end' }} disabled={langEntries.length === 1}>×</button>
-                    </div>
-                  ))}
+                    )
+                  })}
                   <button onClick={addLang} style={{ ...btnSecondary, fontSize: 13 }}>{t.addLanguage}</button>
                 </Section>
 
