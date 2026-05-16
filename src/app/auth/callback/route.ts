@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { sendWelcomeEmail } from '@/lib/email'
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
@@ -47,7 +48,7 @@ export async function GET(request: NextRequest) {
   const meta = user.user_metadata || {}
 
   // Seed profile for new users; ignoreDuplicates=true preserves existing user-edited data
-  await supabase.from('profiles').upsert({
+  const { data: upsertResult } = await supabase.from('profiles').upsert({
     id: user.id,
     email: user.email,
     first_name: meta.full_name?.split(' ')[0] || meta.given_name || meta.first_name || '',
@@ -55,7 +56,13 @@ export async function GET(request: NextRequest) {
     // Capture Google/OAuth avatar for new users (ignored on conflict by ignoreDuplicates)
     avatar_url: meta.avatar_url || meta.picture || null,
     is_pro: false,
-  }, { onConflict: 'id', ignoreDuplicates: true })
+  }, { onConflict: 'id', ignoreDuplicates: true }).select('id').single()
+
+  // Send welcome email only for new users (upsert returned data = new row created)
+  if (upsertResult && user.email) {
+    const firstName = meta.full_name?.split(' ')[0] || meta.given_name || meta.first_name || ''
+    sendWelcomeEmail(user.id, user.email, firstName).catch(e => console.error('Welcome email failed:', e))
+  }
 
   // Check if user has completed onboarding
   const { data: profileData } = await supabase

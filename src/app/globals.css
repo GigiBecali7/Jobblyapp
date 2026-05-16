@@ -738,9 +738,17 @@ html.theme-light [data-no-invert] {
     font-size: 16px; /* prevent iOS zoom */
   }
   .profile-save-toast {
-    bottom: 16px;
+    bottom: 88px; /* above mobile bottom nav */
     right: 16px;
     left: 16px;
     text-align: center;
+  }
+}
+
+/* ── GLOBAL MOBILE (≤768px) ──────────────────────────────── */
+@media (max-width: 768px) {
+  html, body {
+    overflow-x: hidden;
+    max-width: 100vw;
   }
 }

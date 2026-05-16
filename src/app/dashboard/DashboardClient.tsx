@@ -7,6 +7,8 @@ import { createClient } from '@/lib/supabase/client'
 import { JMark } from '@/components/JLogo'
 import type { UserProfile, Application } from '@/lib/types'
 import { getProfileCompleteness } from '@/lib/profileCompleteness'
+import { useIsMobile } from '@/lib/useIsMobile'
+import { trackEvent } from '@/components/MetaPixel'
 
 interface Props {
   profile: UserProfile
@@ -69,6 +71,11 @@ function makeMockJobs() {
   const matches = [92, 88, 80, 74, 68, 85, 77]
   const skillSets = [['Product Management', 'Strategie', 'Kommunikation'], ['Analyse', 'Daten', 'Excel'], ['Beratung', 'Strategie', 'Präsentation'], ['Marketing', 'Social Media', 'Content'], ['Koordination', 'Teamführung', 'Reporting'], ['React', 'TypeScript', 'Node.js'], ['Python', 'ML', 'Statistics']]
   const times = ['Vor 2 Stunden', 'Vor 5 Stunden', 'Vor 1 Tag', 'Vor 2 Tagen', 'Vor 3 Tagen', 'Gerade eben', 'Vor 4 Stunden']
+  // Mock contact emails — alternating to demo both Flow A and Flow B
+  const contactEmails = [
+    'bewerbung@techvision.de', null, 'jobs@digitalsolutions.at',
+    null, 'careers@karrierehub.de', null, 'apply@viennafintech.at',
+  ]
   return companies.map((c, i) => ({
     id: String(i + 1), company: c.name, initials: c.init, color: c.color,
     title: titles[i], location: `${locations[i]}, Deutschland/Österreich`, type: types[i],
@@ -76,6 +83,7 @@ function makeMockJobs() {
     match: matches[i], skills: skillSets[i], posted: times[i],
     description: `Wir suchen einen engagierten ${titles[i].replace(' (m/w/d)', '')} für unser wachsendes Team bei ${c.name}. Sie bringen Erfahrung mit und arbeiten gerne im Team.`,
     industry: i < 2 ? 'tech' : i < 4 ? 'marketing' : 'other',
+    contactEmail: contactEmails[i] as string | null,
   }))
 }
 
@@ -105,6 +113,19 @@ interface RealJob {
   id: string; title: string; company: string; location: string; type: string
   salary: string; description: string; url: string; postedAt: string
   source: string; matchScore: number; skills: string[]
+  email?: string; contact_email?: string; apply_email?: string
+}
+
+const EMAIL_SKIP = /^(noreply|no-reply|support|info|hello|contact|newsletter|marketing|donotreply)@/i
+
+function extractContactEmail(job: RealJob): string | null {
+  // Check API fields first
+  const direct = job.email || job.contact_email || job.apply_email
+  if (direct && !EMAIL_SKIP.test(direct)) return direct
+  // Scan description
+  const matches = (job.description || '').match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g)
+  const found = matches?.find(e => !EMAIL_SKIP.test(e)) || null
+  return found
 }
 
 function adaptJob(j: RealJob): ReturnType<typeof makeMockJobs>[0] {
@@ -119,6 +140,7 @@ function adaptJob(j: RealJob): ReturnType<typeof makeMockJobs>[0] {
     salary: j.salary || 'Gehalt nicht angegeben',
     match: j.matchScore, skills: j.skills, posted: dateStr,
     description: j.description, industry: '',
+    contactEmail: extractContactEmail(j),
   }
 }
 
@@ -141,6 +163,102 @@ function AvatarPopup({ profile, isPro, onNavigate, side }: { profile: UserProfil
         Meine Daten bearbeiten →
       </button>
     </div>
+  )
+}
+
+// ── Mobile components ─────────────────────────────────────────────────────────
+const BOTTOM_NAV: { id: NavId; icon: string; label: string }[] = [
+  { id: 'dashboard', icon: '🏠', label: 'Home' },
+  { id: 'jobs',      icon: '🔍', label: 'Jobs' },
+  { id: 'cv',        icon: '📄', label: 'CV' },
+  { id: 'letter',    icon: '✉️', label: 'Brief' },
+  { id: 'profile',   icon: '👤', label: 'Profil' },
+]
+
+function MobileTopBar({ onHamburger, isPro, onUpgrade }: { onHamburger: () => void; isPro: boolean; onUpgrade: () => void }) {
+  return (
+    <header style={{ height: 56, background: C.bg, borderBottom: `0.5px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', flexShrink: 0, zIndex: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <JMark size={26} />
+        <span style={{ fontSize: 16, fontWeight: 700, color: C.white, letterSpacing: '-.3px' }}>
+          Jobbly<span style={{ color: C.navy3, fontWeight: 400 }}>.ai</span>
+        </span>
+      </div>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        {!isPro && (
+          <button onClick={onUpgrade} style={{ fontSize: 11, padding: '5px 11px', borderRadius: 20, background: 'rgba(124,58,237,0.2)', color: '#a78bfa', border: `0.5px solid rgba(124,58,237,0.4)`, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, whiteSpace: 'nowrap' }}>⭐ Pro</button>
+        )}
+        {isPro && (
+          <span style={{ fontSize: 11, padding: '5px 11px', borderRadius: 20, background: 'rgba(124,58,237,0.25)', color: '#a78bfa', border: `0.5px solid rgba(124,58,237,0.5)`, fontWeight: 700 }}>⭐ Premium</span>
+        )}
+        <button onClick={onHamburger} style={{ background: 'none', border: `0.5px solid ${C.border}`, borderRadius: 8, width: 40, height: 40, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: C.white }}>☰</button>
+      </div>
+    </header>
+  )
+}
+
+function MobileDrawer({ active, onNav, profile, isPro, onUpgrade, onLogout, onClose }: {
+  active: NavId; onNav: (id: NavId) => void
+  profile: UserProfile; isPro: boolean; onUpgrade: () => void; onLogout: () => void; onClose: () => void
+}) {
+  const initials = ((profile.first_name || '?').charAt(0) + (profile.last_name || '').charAt(0)).toUpperCase()
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 500, backdropFilter: 'blur(2px)' }} />
+      <div style={{ position: 'fixed', top: 0, left: 0, bottom: 0, width: 280, background: '#0f1929', borderRight: `0.5px solid ${C.border2}`, zIndex: 501, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+        <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: `0.5px solid ${C.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <JMark size={26} />
+            <span style={{ fontSize: 16, fontWeight: 700, color: C.white }}>Jobbly<span style={{ color: C.navy3, fontWeight: 400 }}>.ai</span></span>
+          </div>
+          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.06)', border: `0.5px solid ${C.border}`, borderRadius: '50%', width: 34, height: 34, cursor: 'pointer', color: C.mid, fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+        </div>
+        <nav style={{ flex: 1, padding: 10 }}>
+          {NAV.map(({ id, icon, label, badge }) => {
+            const isActive = active === id
+            return (
+              <button key={id} onClick={() => { onNav(id); onClose() }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', minHeight: 52, borderRadius: 10, border: 'none', cursor: 'pointer', background: isActive ? 'rgba(27,46,107,0.5)' : 'transparent', color: isActive ? C.white : C.mid, fontFamily: 'inherit', fontSize: 14, fontWeight: isActive ? 600 : 400, marginBottom: 4, textAlign: 'left' }}>
+                <span style={{ fontSize: 17, width: 22, textAlign: 'center', flexShrink: 0 }}>{icon}</span>
+                <span style={{ flex: 1 }}>{label}</span>
+                {badge && <span style={{ fontSize: 10, background: C.navy, color: C.navy3, padding: '2px 7px', borderRadius: 10, fontWeight: 700 }}>{badge}</span>}
+              </button>
+            )
+          })}
+        </nav>
+        {!isPro && (
+          <div style={{ margin: '0 10px 12px', padding: 14, borderRadius: 12, background: 'rgba(27,46,107,0.28)', border: `0.5px solid rgba(37,58,133,0.5)` }}>
+            <div style={{ fontSize: 22, textAlign: 'center', marginBottom: 6 }}>👑</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.white, textAlign: 'center', marginBottom: 10 }}>Upgrade auf Premium</div>
+            <button onClick={() => { onUpgrade(); onClose() }} style={{ width: '100%', padding: '10px', borderRadius: 8, background: `linear-gradient(135deg, ${C.purple}, ${C.purple2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 700 }}>Jetzt upgraden</button>
+          </div>
+        )}
+        <div style={{ padding: '12px 14px', borderTop: `0.5px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: C.white, flexShrink: 0 }}>{initials}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: C.white, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.first_name} {profile.last_name}</div>
+            <div style={{ fontSize: 10, color: C.mid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.email}</div>
+          </div>
+          <button onClick={onLogout} title="Abmelden" style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.mid, fontSize: 18, padding: 6, minWidth: 40, minHeight: 40, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>↩</button>
+        </div>
+      </div>
+    </>
+  )
+}
+
+function BottomNav({ active, onNav }: { active: NavId; onNav: (id: NavId) => void }) {
+  return (
+    <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0, height: 64, background: C.bg, borderTop: `0.5px solid ${C.border2}`, display: 'flex', alignItems: 'stretch', zIndex: 300, paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      {BOTTOM_NAV.map(({ id, icon, label }) => {
+        const isActive = active === id
+        return (
+          <button key={id} onClick={() => onNav(id)} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', color: isActive ? C.navy3 : C.mid, position: 'relative', minHeight: 44 }}>
+            {isActive && <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', width: 28, height: 2, borderRadius: 1, background: C.navy3 }} />}
+            <span style={{ fontSize: 20, lineHeight: 1 }}>{icon}</span>
+            <span style={{ fontSize: 10, fontWeight: isActive ? 700 : 400, letterSpacing: '.02em' }}>{label}</span>
+          </button>
+        )
+      })}
+    </nav>
   )
 }
 
@@ -404,6 +522,7 @@ function setBookmarkPersisted(id: string, val: boolean) {
 function JobCard({ job, onClick, compact }: { job: ReturnType<typeof makeMockJobs>[0]; onClick: () => void; compact?: boolean }) {
   const [bookmarked, setBookmarked] = useState(() => typeof window !== 'undefined' ? getBookmarks().includes(job.id) : false)
   const matchColor = job.match >= 85 ? C.success : job.match >= 70 ? C.amber : C.mid
+  const hasDirectEmail = !!(job as ReturnType<typeof makeMockJobs>[0] & { contactEmail?: string | null }).contactEmail
 
   return (
     <div
@@ -434,8 +553,13 @@ function JobCard({ job, onClick, compact }: { job: ReturnType<typeof makeMockJob
         </div>
       </div>
       {!compact && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, paddingTop: 8, borderTop: `0.5px solid ${C.border}` }}>
-          <span style={{ fontSize: 11, color: C.mid }}>Gehalt: {job.salary}</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 8, borderTop: `0.5px solid ${C.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 11, color: C.mid }}>Gehalt: {job.salary}</span>
+            <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 10, fontWeight: 700, background: hasDirectEmail ? 'rgba(27,46,107,0.25)' : 'rgba(255,255,255,0.05)', color: hasDirectEmail ? '#93AFFD' : C.mid, border: `0.5px solid ${hasDirectEmail ? 'rgba(27,46,107,0.4)' : 'rgba(255,255,255,0.08)'}` }}>
+              {hasDirectEmail ? '📧 Direkt' : '🌐 Portal'}
+            </span>
+          </div>
           <span style={{ fontSize: 11, color: C.mid }}>{job.posted}</span>
         </div>
       )}
@@ -608,7 +732,7 @@ function ProfileCompleteness({ profile, onNav }: { profile: UserProfile; onNav: 
   )
 }
 
-function RightSidebar({ applications, profile, onNav }: { applications: Application[]; profile: UserProfile; onNav: (id: NavId) => void }) {
+function RightSidebar({ applications, profile, onNav, isMobile }: { applications: Application[]; profile: UserProfile; onNav: (id: NavId) => void; isMobile?: boolean }) {
   const supabase = createClient()
   const p = profile as UserProfile & Record<string, unknown>
   const [salary, setSalary] = useState<number>(() => Number(p.salary_target) || 60000)
@@ -635,7 +759,10 @@ function RightSidebar({ applications, profile, onNav }: { applications: Applicat
   }, [applications])
 
   return (
-    <aside style={{ width: 288, flexShrink: 0, borderLeft: `0.5px solid ${C.border}`, padding: '24px 20px', overflowY: 'auto', background: C.bg }}>
+    <aside style={isMobile
+      ? { width: '100%', padding: '0', background: C.bg }
+      : { width: 288, flexShrink: 0, borderLeft: `0.5px solid ${C.border}`, padding: '24px 20px', overflowY: 'auto', background: C.bg }
+    }>
       <ProfileCompleteness profile={profile} onNav={onNav} />
       <section style={{ marginBottom: 28 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
@@ -722,12 +849,14 @@ function JobsSection({ isPro, onSelect, onNeedPro, initialSearch }: { isPro: boo
   const [loading, setLoading]   = useState(false)
   const [apiError, setApiError] = useState('')
   const [searched, setSearched] = useState(false)
+  const mob = useIsMobile()
 
-  const inSt: React.CSSProperties = { padding: '9px 14px', borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.04)', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none', width: '100%' }
+  const inSt: React.CSSProperties = { padding: '10px 14px', minHeight: 44, borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.04)', color: C.white, fontFamily: 'inherit', fontSize: mob ? 16 : 13, outline: 'none', width: '100%' }
   const selSt: React.CSSProperties = { ...inSt, background: '#0D1117', cursor: 'pointer' }
 
   async function doSearch() {
     setLoading(true); setApiError(''); setSearched(true)
+    if (search) trackEvent('Search', { search_string: search })
     try {
       const params = new URLSearchParams()
       if (search) params.set('q', search)
@@ -748,23 +877,41 @@ function JobsSection({ isPro, onSelect, onNeedPro, initialSearch }: { isPro: boo
 
   return (
     <div>
-      <h2 style={{ fontSize: 22, fontWeight: 700, color: C.white, marginBottom: 8 }}>Jobs finden</h2>
-      <p style={{ fontSize: 13, color: C.mid, marginBottom: 20 }}>{searched && !loading ? `${jobs.length} Jobs gefunden` : 'Echte Jobs aus Europa & DACH'}</p>
-      {/* Filters */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 10, marginBottom: 20, alignItems: 'end' }}>
-        <input value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && doSearch()} placeholder="Jobtitel, Keywords…" style={inSt} />
-        <input value={location} onChange={e => setLocation(e.target.value)} onKeyDown={e => e.key === 'Enter' && doSearch()} placeholder="Stadt, Region…" style={inSt} />
-        <select value={workType} onChange={e => setWorkType(e.target.value)} style={selSt}>
-          <option value="">Alle Modelle</option>
-          <option value="Remote">Remote</option>
-          <option value="Hybrid">Hybrid</option>
-          <option value="Vor Ort">Vor Ort</option>
-        </select>
-        <button onClick={doSearch} disabled={loading}
-          style={{ padding: '9px 20px', borderRadius: 9, background: C.navy, color: C.white, border: 'none', cursor: loading ? 'wait' : 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>
-          {loading ? '⏳' : '🔍 Suchen'}
-        </button>
-      </div>
+      <h2 style={{ fontSize: mob ? 20 : 22, fontWeight: 700, color: C.white, marginBottom: 6 }}>Jobs finden</h2>
+      <p style={{ fontSize: 13, color: C.mid, marginBottom: 16 }}>{searched && !loading ? `${jobs.length} Jobs gefunden` : 'Echte Jobs aus Europa & DACH'}</p>
+      {/* Filters — stack on mobile */}
+      {mob ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+          <input value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && doSearch()} placeholder="Jobtitel, Keywords…" style={inSt} />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <input value={location} onChange={e => setLocation(e.target.value)} placeholder="Stadt…" style={inSt} />
+            <select value={workType} onChange={e => setWorkType(e.target.value)} style={selSt}>
+              <option value="">Alle Modelle</option>
+              <option value="Remote">Remote</option>
+              <option value="Hybrid">Hybrid</option>
+              <option value="Vor Ort">Vor Ort</option>
+            </select>
+          </div>
+          <button onClick={doSearch} disabled={loading} style={{ padding: '11px', minHeight: 48, borderRadius: 10, background: C.navy, color: C.white, border: 'none', cursor: loading ? 'wait' : 'pointer', fontFamily: 'inherit', fontSize: 15, fontWeight: 700 }}>
+            {loading ? '⏳ Suche läuft…' : '🔍 Jobs suchen'}
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 10, marginBottom: 20, alignItems: 'end' }}>
+          <input value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && doSearch()} placeholder="Jobtitel, Keywords…" style={inSt} />
+          <input value={location} onChange={e => setLocation(e.target.value)} onKeyDown={e => e.key === 'Enter' && doSearch()} placeholder="Stadt, Region…" style={inSt} />
+          <select value={workType} onChange={e => setWorkType(e.target.value)} style={selSt}>
+            <option value="">Alle Modelle</option>
+            <option value="Remote">Remote</option>
+            <option value="Hybrid">Hybrid</option>
+            <option value="Vor Ort">Vor Ort</option>
+          </select>
+          <button onClick={doSearch} disabled={loading}
+            style={{ padding: '9px 20px', borderRadius: 9, background: C.navy, color: C.white, border: 'none', cursor: loading ? 'wait' : 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>
+            {loading ? '⏳' : '🔍 Suchen'}
+          </button>
+        </div>
+      )}
       {loading && (
         <div style={{ textAlign: 'center', padding: '3rem', color: C.mid }}>
           <div style={{ fontSize: 32, marginBottom: 10 }}>⏳</div>
@@ -887,7 +1034,7 @@ function ApplicationsSection({ applications, profile }: { applications: Applicat
       {showAdd && (
         <div style={{ padding: '18px 20px', borderRadius: 12, border: `0.5px solid rgba(27,46,107,0.4)`, background: 'rgba(27,46,107,0.1)', marginBottom: 16 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: C.white, marginBottom: 14 }}>Neue Bewerbung</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, marginBottom: 10 }}>
             <div>
               <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 5 }}>Position *</label>
               <input value={newPos} onChange={e => setNewPos(e.target.value)} onKeyDown={e => e.key === 'Enter' && addApplication()} placeholder="z.B. Product Manager" style={inStyle} />
@@ -2303,6 +2450,7 @@ function UpgradeModal({ onClose, onUpgrade }: { onClose: () => void; onUpgrade: 
   const [loading, setLoading] = useState(false)
   async function handleUpgrade() {
     setLoading(true)
+    trackEvent('InitiateCheckout', { value: 9.99, currency: 'EUR' })
     try {
       const res = await fetch('/api/stripe/checkout', { method: 'POST' })
       const data = await res.json()
@@ -2332,10 +2480,313 @@ function UpgradeModal({ onClose, onUpgrade }: { onClose: () => void; onUpgrade: 
   )
 }
 
+// ── Application Modal (4-step) ────────────────────────────────────────────────
+interface SavedCVMeta { id: string; title: string; design: string; edit_count: number }
+interface CoverLetterMeta { id: string; job_title: string; company: string; design: string; content: string }
+
+function ApplicationModal({
+  job, profile, isPro, applicationsCount, onClose, onSuccess,
+}: {
+  job: ReturnType<typeof makeMockJobs>[0]
+  profile: UserProfile
+  isPro: boolean
+  applicationsCount: number
+  onClose: () => void
+  onSuccess: () => void
+}) {
+  const MAX_FREE_APPS = 5
+  // Auto-detect email from job data
+  const jobWithEmail = job as ReturnType<typeof makeMockJobs>[0] & { contactEmail?: string | null }
+  const detectedEmail = jobWithEmail.contactEmail || null
+
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1)
+  const [flowType, setFlowType] = useState<'email' | 'portal'>(detectedEmail ? 'email' : 'portal')
+  const [recipientEmail, setRecipientEmail] = useState(detectedEmail || '')
+  const [cvs, setCvs] = useState<SavedCVMeta[]>([])
+  const [letters, setLetters] = useState<CoverLetterMeta[]>([])
+  const [selectedCvId, setSelectedCvId] = useState<string>('')
+  const [selectedLetterId, setSelectedLetterId] = useState<string>('')
+  const [sending, setSending] = useState(false)
+  const [loadingDocs, setLoadingDocs] = useState(true)
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
+  const supabase = createClient()
+
+  function showToast(msg: string, ok = true) { setToast({ msg, ok }); setTimeout(() => setToast(null), 4000) }
+
+  useEffect(() => {
+    Promise.all([
+      fetch('/api/cv/list').then(r => r.json()).then(j => setCvs(j.cvs || [])),
+      supabase.from('cover_letters').select('id,job_title,company,design,content').order('created_at', { ascending: false })
+        .then(({ data }) => setLetters((data || []) as CoverLetterMeta[])),
+    ]).finally(() => setLoadingDocs(false))
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const selectedCv = cvs.find(c => c.id === selectedCvId)
+  const selectedLetter = letters.find(l => l.id === selectedLetterId)
+
+  function canProceedStep1() {
+    if (flowType === 'email' && !recipientEmail.trim()) return false
+    return true
+  }
+
+  function canProceedStep2() { return !!selectedCvId && !!selectedLetterId }
+
+  async function handleSend() {
+    if (!isPro && applicationsCount >= MAX_FREE_APPS) {
+      showToast(`Free-Plan: max. ${MAX_FREE_APPS} Bewerbungen. Upgrade zu Pro!`, false); return
+    }
+    setSending(true)
+    try {
+      if (flowType === 'email') {
+        const res = await fetch('/api/apply/email', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            recipientEmail, jobTitle: job.title, company: job.company,
+            cvId: selectedCvId, coverLetterId: selectedLetterId,
+          }),
+        })
+        const json = await res.json()
+        if (!res.ok) { showToast(json.error || 'Senden fehlgeschlagen', false); return }
+      } else {
+        // Flow B: record application without sending email
+        await supabase.from('applications').insert({
+          user_id: profile.id, position: job.title, company: job.company,
+          status: 'Gesendet', application_method: 'portal',
+          cv_id: selectedCvId || null, cover_letter_id: selectedLetterId || null,
+          template: 'classic', style: 'balanced',
+          cv_data: {}, cover_letter: selectedLetter?.content || '',
+          applied_at: new Date().toISOString(),
+        })
+      }
+      trackEvent('SubmitApplication')
+      showToast('Bewerbung erfolgreich! ✓')
+      setTimeout(() => { onSuccess(); onClose() }, 1800)
+    } catch { showToast('Fehler beim Senden', false) }
+    finally { setSending(false) }
+  }
+
+  const modalStyle: React.CSSProperties = {
+    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex',
+    alignItems: 'center', justifyContent: 'center', zIndex: 300, padding: 20, backdropFilter: 'blur(4px)',
+  }
+  const boxStyle: React.CSSProperties = {
+    background: '#0D1117', borderRadius: 16, border: '0.5px solid rgba(255,255,255,0.1)',
+    width: '100%', maxWidth: 560, maxHeight: '92vh', overflow: 'auto',
+  }
+  const stepBtn = (active: boolean): React.CSSProperties => ({
+    width: 28, height: 28, borderRadius: '50%', border: 'none', display: 'flex',
+    alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700,
+    backgroundColor: active ? C.navy : 'rgba(255,255,255,0.06)', color: active ? C.white : C.mid,
+    flexShrink: 0,
+  })
+  const selCard = (selected: boolean): React.CSSProperties => ({
+    padding: '12px 16px', borderRadius: 10, border: `1.5px solid ${selected ? C.navy : 'rgba(255,255,255,0.08)'}`,
+    background: selected ? 'rgba(27,46,107,0.2)' : 'rgba(255,255,255,0.02)',
+    cursor: 'pointer', transition: 'all .12s',
+  })
+
+  return (
+    <div style={modalStyle} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={boxStyle}>
+        {/* Header */}
+        <div style={{ padding: '18px 22px', borderBottom: '0.5px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 40, height: 40, borderRadius: 10, background: job.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: C.white }}>{job.initials}</div>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: C.white }}>{job.title}</div>
+              <div style={{ fontSize: 12, color: C.mid }}>{job.company}</div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {([1, 2, 3, 4] as const).map(s => (
+              <div key={s} style={stepBtn(step >= s)}>{s}</div>
+            ))}
+            <button onClick={onClose} style={{ marginLeft: 8, background: 'rgba(255,255,255,0.06)', border: '0.5px solid rgba(255,255,255,0.1)', borderRadius: '50%', width: 28, height: 28, cursor: 'pointer', color: C.mid, fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+          </div>
+        </div>
+
+        <div style={{ padding: '22px 22px' }}>
+          {toast && (
+            <div style={{ marginBottom: 16, padding: '10px 16px', borderRadius: 8, fontSize: 13, background: toast.ok ? '#0D2A1A' : '#2A0D0D', color: toast.ok ? '#4ADE80' : '#f87171', border: `1px solid ${toast.ok ? '#2A6B47' : '#6B2A2A'}` }}>
+              {toast.msg}
+            </div>
+          )}
+
+          {/* Step 1: Method & contact */}
+          {step === 1 && (
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: C.white, marginBottom: 6 }}>Bewerbungsart wählen</div>
+              {detectedEmail ? (
+                <div style={{ padding: '10px 14px', borderRadius: 9, background: 'rgba(27,46,107,0.15)', border: '0.5px solid rgba(27,46,107,0.35)', marginBottom: 16, fontSize: 12, color: '#93AFFD', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  📧 <strong>Direkte Bewerbung per E-Mail möglich</strong>
+                </div>
+              ) : (
+                <div style={{ padding: '10px 14px', borderRadius: 9, background: 'rgba(255,255,255,0.04)', border: '0.5px solid rgba(255,255,255,0.1)', marginBottom: 16, fontSize: 12, color: C.mid, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  🌐 <span>Bewerbung über Portal — keine direkte E-Mail gefunden</span>
+                </div>
+              )}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+                {([
+                  ['email', '📧', 'Per E-Mail', 'Jobbly sendet deine Bewerbung direkt'],
+                  ['portal', '🌐', 'Bewerbungsportal', 'Du bewirbst dich über die Website'],
+                ] as const).map(([type, icon, label, desc]) => (
+                  <div key={type} onClick={() => setFlowType(type)} style={selCard(flowType === type)}>
+                    <div style={{ fontSize: 22, marginBottom: 6 }}>{icon}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.white, marginBottom: 3 }}>{label}</div>
+                    <div style={{ fontSize: 11, color: C.mid, lineHeight: 1.4 }}>{desc}</div>
+                  </div>
+                ))}
+              </div>
+              {flowType === 'email' && (
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: C.mid, marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: 0.8 }}>
+                    {detectedEmail ? 'Erkannte E-Mail (editierbar)' : 'Empfänger-E-Mail *'}
+                  </label>
+                  <input
+                    value={recipientEmail} onChange={e => setRecipientEmail(e.target.value)}
+                    placeholder="bewerbung@unternehmen.de"
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: 9, border: `1px solid ${detectedEmail ? 'rgba(27,46,107,0.5)' : 'rgba(255,255,255,0.1)'}`, background: '#0d0d1a', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none', boxSizing: 'border-box' as const }}
+                  />
+                  {detectedEmail && (
+                    <div style={{ fontSize: 11, color: C.mid, marginTop: 4 }}>
+                      Bewerbung wird gesendet an: <span style={{ color: '#93AFFD' }}>{recipientEmail || detectedEmail}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+              <button
+                onClick={() => canProceedStep1() && setStep(2)}
+                disabled={!canProceedStep1()}
+                style={{ width: '100%', padding: 12, borderRadius: 10, background: canProceedStep1() ? `linear-gradient(135deg, ${C.navy}, ${C.navy2})` : 'rgba(255,255,255,0.06)', color: canProceedStep1() ? C.white : C.mid, border: 'none', cursor: canProceedStep1() ? 'pointer' : 'not-allowed', fontFamily: 'inherit', fontSize: 14, fontWeight: 600 }}>
+                Weiter →
+              </button>
+            </div>
+          )}
+
+          {/* Step 2: Document picker */}
+          {step === 2 && (
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: C.white, marginBottom: 6 }}>Dokumente auswählen</div>
+              <div style={{ fontSize: 13, color: C.mid, marginBottom: 20 }}>Wähle Lebenslauf und Anschreiben für diese Bewerbung</div>
+              {loadingDocs ? (
+                <div style={{ textAlign: 'center', color: C.mid, padding: 32 }}>Lade Dokumente…</div>
+              ) : (
+                <>
+                  <div style={{ marginBottom: 20 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: C.mid, marginBottom: 10, textTransform: 'uppercase' as const, letterSpacing: 0.8 }}>Lebenslauf</div>
+                    {cvs.length === 0 ? (
+                      <div style={{ padding: '16px', borderRadius: 10, background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.2)', color: '#f87171', fontSize: 13 }}>
+                        Kein Lebenslauf gefunden. <a href="/dashboard/lebenslauf" style={{ color: '#93AFFD' }}>Jetzt erstellen →</a>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 8 }}>
+                        {cvs.map(cv => (
+                          <div key={cv.id} onClick={() => setSelectedCvId(cv.id)} style={selCard(selectedCvId === cv.id)}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: C.white }}>{cv.title}</div>
+                            <div style={{ fontSize: 11, color: C.mid, marginTop: 2 }}>{cv.design}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ marginBottom: 20 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: C.mid, marginBottom: 10, textTransform: 'uppercase' as const, letterSpacing: 0.8 }}>Anschreiben</div>
+                    {letters.length === 0 ? (
+                      <div style={{ padding: '16px', borderRadius: 10, background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.2)', color: '#f87171', fontSize: 13 }}>
+                        Kein Anschreiben gefunden. <a href="/dashboard/anschreiben" style={{ color: '#93AFFD' }}>Jetzt erstellen →</a>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 8 }}>
+                        {letters.map(l => (
+                          <div key={l.id} onClick={() => setSelectedLetterId(l.id)} style={selCard(selectedLetterId === l.id)}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: C.white }}>{l.job_title} — {l.company}</div>
+                            <div style={{ fontSize: 11, color: C.mid, marginTop: 2 }}>{l.design}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setStep(1)} style={{ flex: 1, padding: 11, borderRadius: 9, background: 'rgba(255,255,255,0.04)', color: C.mid, border: '0.5px solid rgba(255,255,255,0.1)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13 }}>← Zurück</button>
+                <button onClick={() => canProceedStep2() && setStep(3)} disabled={!canProceedStep2()} style={{ flex: 2, padding: 11, borderRadius: 9, background: canProceedStep2() ? `linear-gradient(135deg, ${C.navy}, ${C.navy2})` : 'rgba(255,255,255,0.06)', color: canProceedStep2() ? C.white : C.mid, border: 'none', cursor: canProceedStep2() ? 'pointer' : 'not-allowed', fontFamily: 'inherit', fontSize: 13, fontWeight: 600 }}>Vorschau →</button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Preview */}
+          {step === 3 && (
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: C.white, marginBottom: 16 }}>Vorschau</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+                <div style={{ padding: 14, borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: '0.5px solid rgba(255,255,255,0.08)' }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: C.mid, marginBottom: 8, textTransform: 'uppercase' as const, letterSpacing: 0.8 }}>📄 Lebenslauf</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: C.white }}>{selectedCv?.title}</div>
+                  <div style={{ fontSize: 11, color: C.mid, marginTop: 2 }}>{selectedCv?.design}</div>
+                </div>
+                <div style={{ padding: 14, borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: '0.5px solid rgba(255,255,255,0.08)' }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: C.mid, marginBottom: 8, textTransform: 'uppercase' as const, letterSpacing: 0.8 }}>✉️ Anschreiben</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: C.white }}>{selectedLetter?.job_title}</div>
+                  <div style={{ fontSize: 11, color: C.mid, marginTop: 2 }}>{selectedLetter?.company}</div>
+                </div>
+              </div>
+              <div style={{ padding: 14, borderRadius: 10, background: 'rgba(255,255,255,0.02)', border: '0.5px solid rgba(255,255,255,0.06)', marginBottom: 20 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: C.mid, marginBottom: 8 }}>Anschreiben Vorschau</div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', lineHeight: 1.7, maxHeight: 160, overflow: 'auto', whiteSpace: 'pre-wrap' }}>
+                  {selectedLetter?.content?.slice(0, 400)}{(selectedLetter?.content?.length || 0) > 400 ? '…' : ''}
+                </div>
+              </div>
+              <div style={{ padding: 12, borderRadius: 10, background: flowType === 'email' ? 'rgba(27,46,107,0.12)' : 'rgba(255,255,255,0.04)', border: `0.5px solid ${flowType === 'email' ? 'rgba(27,46,107,0.3)' : 'rgba(255,255,255,0.08)'}`, marginBottom: 20, fontSize: 13, color: C.mid }}>
+                {flowType === 'email' ? `📧 Wird gesendet an: ${recipientEmail}` : '🌐 Bewerbungsportal — Dokumente zum Download bereit'}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setStep(2)} style={{ flex: 1, padding: 11, borderRadius: 9, background: 'rgba(255,255,255,0.04)', color: C.mid, border: '0.5px solid rgba(255,255,255,0.1)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13 }}>← Zurück</button>
+                <button onClick={() => setStep(4)} style={{ flex: 2, padding: 11, borderRadius: 9, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600 }}>Senden →</button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 4: Send / Confirm */}
+          {step === 4 && (
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: C.white, marginBottom: 6 }}>
+                {flowType === 'email' ? 'Bewerbung absenden' : 'Bewerbung abschließen'}
+              </div>
+              <div style={{ fontSize: 13, color: C.mid, marginBottom: 24 }}>
+                {flowType === 'email'
+                  ? `Jobbly sendet deine Bewerbung direkt an ${recipientEmail}.`
+                  : 'Lade deine Dokumente herunter und bewirb dich über das Unternehmensportal.'}
+              </div>
+              {flowType === 'portal' && (
+                <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' as const }}>
+                  <a href={`/dashboard/lebenslauf`} style={{ flex: 1, padding: '10px 14px', borderRadius: 9, background: 'rgba(27,46,107,0.15)', border: '0.5px solid rgba(27,46,107,0.3)', color: '#93AFFD', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, textDecoration: 'none', display: 'block', textAlign: 'center' as const }}>
+                    📄 Lebenslauf öffnen
+                  </a>
+                  <a href={`/dashboard/anschreiben`} style={{ flex: 1, padding: '10px 14px', borderRadius: 9, background: 'rgba(99,102,241,0.1)', border: '0.5px solid rgba(99,102,241,0.25)', color: '#93AFFD', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, textDecoration: 'none', display: 'block', textAlign: 'center' as const }}>
+                    ✉️ Anschreiben öffnen
+                  </a>
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setStep(3)} disabled={sending} style={{ flex: 1, padding: 11, borderRadius: 9, background: 'rgba(255,255,255,0.04)', color: C.mid, border: '0.5px solid rgba(255,255,255,0.1)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13 }}>← Zurück</button>
+                <button onClick={handleSend} disabled={sending} style={{ flex: 2, padding: 12, borderRadius: 9, background: sending ? 'rgba(255,255,255,0.06)' : `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: sending ? C.mid : C.white, border: 'none', cursor: sending ? 'not-allowed' : 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 700 }}>
+                  {sending ? 'Wird gesendet…' : flowType === 'email' ? '📧 Bewerbung senden' : '✅ Bewerbung erfassen'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main dashboard ────────────────────────────────────────────────────────────
 export default function DashboardClient({ profile, applications, justUpgraded, upgradeStatus }: Props) {
   const [activeNav, setActiveNav] = useState<NavId>('dashboard')
   const [selectedJob, setSelectedJob] = useState<ReturnType<typeof makeMockJobs>[0] | null>(null)
+  const [applyJob, setApplyJob] = useState<ReturnType<typeof makeMockJobs>[0] | null>(null)
   const [showUpgrade, setShowUpgrade] = useState(false)
   const [globalSearch, setGlobalSearch] = useState('')
   const [globalToast, setGlobalToast] = useState<string>('')
@@ -2344,11 +2795,14 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
   const supabase = createClient()
   const router = useRouter()
   const isPro = !!profile.is_pro
+  const isMobile = useIsMobile()
+  const [drawerOpen, setDrawerOpen] = useState(false)
 
   // Show upgrade/cancel toast from URL param (once)
   useEffect(() => {
     if (upgradeStatus === 'success') {
       setGlobalToast('Willkommen bei Jobbly Pro! 🎉 Alle Features sind jetzt freigeschaltet.')
+      trackEvent('Purchase', { value: 9.99, currency: 'EUR', content_name: 'Jobbly Pro' })
       window.history.replaceState({}, '', '/dashboard')
     } else if (upgradeStatus === 'cancelled') {
       setGlobalToast('Upgrade abgebrochen — du kannst jederzeit upgraden.')
@@ -2384,9 +2838,10 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
     setActiveNav(id)
   }
 
-  function renderContent() {
+  function renderContent(mob?: boolean) {
+    const m = mob ?? isMobile
     switch (activeNav) {
-      case 'jobs': return <JobsSection isPro={isPro} onSelect={j => setSelectedJob(j)} onNeedPro={() => setShowUpgrade(true)} initialSearch={globalSearch} />
+      case 'jobs': return <JobsSection isPro={isPro} onSelect={j => { trackEvent('ViewContent', { content_name: j.title, content_category: 'Job', content_type: 'product' }); setSelectedJob(j) }} onNeedPro={() => setShowUpgrade(true)} initialSearch={globalSearch} />
       case 'applications': return <ApplicationsSection applications={applications} profile={profile} />
       case 'cv': { router.push('/dashboard/lebenslauf'); return null }
       case 'letter': { router.push('/dashboard/anschreiben'); return null }
@@ -2396,78 +2851,105 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
       case 'settings': return <SettingsSection profile={profile} isPro={isPro} onUpgrade={() => setShowUpgrade(true)} />
       default: return (
         <>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 28 }}>
-            <div>
+          {/* ── Header ── */}
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: m ? 20 : 28, gap: 12 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
               {justUpgraded && (
                 <div style={{ fontSize: 12, color: C.success, background: 'rgba(13,43,26,0.8)', border: '0.5px solid #2A6B47', borderRadius: 8, padding: '8px 14px', marginBottom: 14, display: 'inline-block' }}>
                   🎉 Willkommen bei Jobbly Premium! Dein Abo ist jetzt aktiv.
                 </div>
               )}
-              <h1 style={{ fontSize: 30, fontWeight: 700, color: C.white, marginBottom: 6, letterSpacing: '-.5px' }}>
+              <h1 style={{ fontSize: m ? 24 : 30, fontWeight: 700, color: C.white, marginBottom: 6, letterSpacing: '-.5px' }}>
                 {profile.first_name ? `Hallo ${profile.first_name}! 👋` : 'Hallo! 👋'}
               </h1>
-              <p style={{ fontSize: 15, color: C.mid }}>
+              <p style={{ fontSize: m ? 13 : 15, color: C.mid }}>
                 {profile.first_name ? 'Bereit für deinen nächsten Karriereschritt?' : (
                   <span>Vervollständige dein <span style={{ color: C.navy3, cursor: 'pointer' }} onClick={() => setActiveNav('profile')}>Profil →</span> um bessere Job-Matches zu erhalten.</span>
                 )}
               </p>
             </div>
-            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-              <button onClick={() => router.push('/dashboard/lebenslauf')} title="Lebenslauf erstellen"
-                style={{ width: 56, height: 56, borderRadius: 14, background: 'rgba(27,46,107,0.18)', border: `0.5px solid rgba(27,46,107,0.35)`, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, transition: 'all .15s' }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(27,46,107,0.35)'; e.currentTarget.style.borderColor = C.navy2 }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(27,46,107,0.18)'; e.currentTarget.style.borderColor = 'rgba(27,46,107,0.35)' }}>
-                <span style={{ fontSize: 22 }}>📄</span>
-                <span style={{ fontSize: 9, color: C.mid, fontWeight: 500, letterSpacing: '.04em' }}>CV</span>
-              </button>
-              <button onClick={() => router.push('/dashboard/anschreiben')} title="Anschreiben erstellen"
-                style={{ width: 56, height: 56, borderRadius: 14, background: 'rgba(99,102,241,0.12)', border: `0.5px solid rgba(99,102,241,0.25)`, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, transition: 'all .15s' }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.25)'; e.currentTarget.style.borderColor = 'rgba(99,102,241,0.5)' }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.12)'; e.currentTarget.style.borderColor = 'rgba(99,102,241,0.25)' }}>
-                <span style={{ fontSize: 22 }}>✨</span>
-                <span style={{ fontSize: 9, color: C.mid, fontWeight: 500, letterSpacing: '.04em' }}>Brief</span>
-              </button>
-            </div>
+            {!m && (
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                <button onClick={() => router.push('/dashboard/lebenslauf')} title="Lebenslauf erstellen"
+                  style={{ width: 56, height: 56, borderRadius: 14, background: 'rgba(27,46,107,0.18)', border: `0.5px solid rgba(27,46,107,0.35)`, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, transition: 'all .15s' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(27,46,107,0.35)'; e.currentTarget.style.borderColor = C.navy2 }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(27,46,107,0.18)'; e.currentTarget.style.borderColor = 'rgba(27,46,107,0.35)' }}>
+                  <span style={{ fontSize: 22 }}>📄</span>
+                  <span style={{ fontSize: 9, color: C.mid, fontWeight: 500, letterSpacing: '.04em' }}>CV</span>
+                </button>
+                <button onClick={() => router.push('/dashboard/anschreiben')} title="Anschreiben erstellen"
+                  style={{ width: 56, height: 56, borderRadius: 14, background: 'rgba(99,102,241,0.12)', border: `0.5px solid rgba(99,102,241,0.25)`, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, transition: 'all .15s' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.25)'; e.currentTarget.style.borderColor = 'rgba(99,102,241,0.5)' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.12)'; e.currentTarget.style.borderColor = 'rgba(99,102,241,0.25)' }}>
+                  <span style={{ fontSize: 22 }}>✨</span>
+                  <span style={{ fontSize: 9, color: C.mid, fontWeight: 500, letterSpacing: '.04em' }}>Brief</span>
+                </button>
+              </div>
+            )}
           </div>
 
-          <div style={{ display: 'flex', gap: 14, marginBottom: 32 }}>
+          {/* ── Stats: 2×2 on mobile, 4-in-row on desktop ── */}
+          <div style={m
+            ? { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }
+            : { display: 'flex', gap: 14, marginBottom: 32 }
+          }>
             <StatCard icon="💼" value={String(dashJobs.length || 0)} label="Passende Jobs" sub="Aktuell" subColor={C.success} onClick={() => setActiveNav('jobs')} />
             <StatCard icon="📊" value={`${profileScore}%`} label="Profil Match" sub={profileScore >= 80 ? 'Sehr gut' : profileScore >= 50 ? 'Ausbaufähig' : 'Unvollständig'} subColor={profileScore >= 80 ? C.success : C.amber} onClick={() => setActiveNav('profile')} />
             <StatCard icon="📋" value={String(applications.length)} label="Bewerbungen" sub="Insgesamt" subColor={C.mid} onClick={() => setActiveNav('applications')} />
-            <StatCard icon="⭐" value="0" label="Einladungen" sub="Letzte 30 Tage" subColor={C.mid} onClick={() => setActiveNav('applications')} />
+            <StatCard icon="⭐" value={String(applications.filter(a => ((a as unknown as Record<string, unknown>).status as string) === 'Interview').length)} label="Einladungen" sub="Letzte 30 Tage" subColor={C.mid} onClick={() => setActiveNav('applications')} />
           </div>
 
+          {/* ── Mobile quick actions ── */}
+          {m && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
+              <button onClick={() => router.push('/dashboard/lebenslauf')} style={{ padding: '14px 10px', borderRadius: 12, background: 'rgba(27,46,107,0.18)', border: `0.5px solid rgba(27,46,107,0.35)`, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, color: C.white, fontFamily: 'inherit', fontSize: 13, fontWeight: 600 }}>
+                <span style={{ fontSize: 20 }}>📄</span> Lebenslauf
+              </button>
+              <button onClick={() => router.push('/dashboard/anschreiben')} style={{ padding: '14px 10px', borderRadius: 12, background: 'rgba(99,102,241,0.12)', border: `0.5px solid rgba(99,102,241,0.25)`, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, color: C.white, fontFamily: 'inherit', fontSize: 13, fontWeight: 600 }}>
+                <span style={{ fontSize: 20 }}>✨</span> Anschreiben
+              </button>
+            </div>
+          )}
+
           {applications.length === 0 && (
-            <div style={{ padding: '20px 24px', borderRadius: 12, border: `0.5px solid rgba(27,46,107,0.3)`, background: 'rgba(27,46,107,0.08)', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 16 }}>
-              <div style={{ fontSize: 28 }}>🎯</div>
+            <div style={{ padding: '16px 18px', borderRadius: 12, border: `0.5px solid rgba(27,46,107,0.3)`, background: 'rgba(27,46,107,0.08)', marginBottom: 20, display: 'flex', alignItems: m ? 'flex-start' : 'center', gap: 14, flexDirection: m ? 'column' : 'row' }}>
+              <div style={{ fontSize: 28, flexShrink: 0 }}>🎯</div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: C.white, marginBottom: 3 }}>Vervollständige dein Profil für bessere Matches</div>
                 <div style={{ fontSize: 12, color: C.mid }}>Mit einem vollständigen Profil findest du bis zu 3× mehr passende Jobs.</div>
               </div>
-              <button onClick={() => { const p = profile as UserProfile & Record<string, unknown>; if (p.onboarding_completed === false) router.push('/onboarding'); else setActiveNav('profile') }} style={{ padding: '8px 16px', borderRadius: 9, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>Profil vervollständigen</button>
+              <button onClick={() => { const p = profile as UserProfile & Record<string, unknown>; if (p.onboarding_completed === false) router.push('/onboarding'); else setActiveNav('profile') }} style={{ padding: '10px 16px', minHeight: 44, borderRadius: 9, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', width: m ? '100%' : 'auto' }}>Profil vervollständigen</button>
             </div>
           )}
 
-          <div style={{ marginBottom: 24 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-              <div style={{ fontSize: 16, fontWeight: 700, color: C.white }}>Top Job Matches für dich</div>
-              <span style={{ fontSize: 13, color: C.navy3, cursor: 'pointer', fontWeight: 500 }} onClick={() => setActiveNav('jobs')}>Alle anzeigen</span>
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: C.white }}>Top Job Matches für dich</div>
+              <span style={{ fontSize: 13, color: C.navy3, cursor: 'pointer', fontWeight: 500 }} onClick={() => setActiveNav('jobs')}>Alle →</span>
             </div>
             {dashJobs.slice(0, 3).map(job => (
-              <JobCard key={job.id} job={job} onClick={() => {
-                if (!isPro) { setShowUpgrade(true); return }
-                setSelectedJob(job)
-              }} />
+              <div key={job.id} style={{ position: 'relative' }}>
+                <JobCard job={job} onClick={() => {
+                  if (!isPro) { setShowUpgrade(true); return }
+                  setSelectedJob(job)
+                }} />
+                <button
+                  onClick={e => { e.stopPropagation(); setApplyJob(job) }}
+                  style={{ position: 'absolute', bottom: 10, right: 12, padding: '5px 12px', borderRadius: 7, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600, zIndex: 1 }}>
+                  Bewerben →
+                </button>
+              </div>
             ))}
           </div>
 
-          <div style={{ padding: '20px 22px', borderRadius: 14, background: 'linear-gradient(135deg, rgba(99,102,241,0.2) 0%, rgba(139,92,246,0.1) 100%)', border: `0.5px solid rgba(99,102,241,0.35)`, display: 'flex', alignItems: 'center', gap: 20 }}>
-            <div style={{ fontSize: 14 }}>✨</div>
+          {/* ── KI banner: stack on mobile ── */}
+          <div style={{ padding: m ? '16px' : '20px 22px', borderRadius: 14, background: 'linear-gradient(135deg, rgba(99,102,241,0.2) 0%, rgba(139,92,246,0.1) 100%)', border: `0.5px solid rgba(99,102,241,0.35)`, display: 'flex', alignItems: m ? 'flex-start' : 'center', gap: 16, flexDirection: m ? 'column' : 'row' }}>
+            <div style={{ fontSize: 20 }}>✨</div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: C.white, marginBottom: 3 }}>KI Anschreiben erstellen</div>
               <div style={{ fontSize: 12, color: C.mid }}>Individuelles Anschreiben, perfekt auf den Job zugeschnitten.</div>
             </div>
-            <button onClick={() => router.push('/dashboard/anschreiben')} style={{ padding: '9px 18px', borderRadius: 9, background: `linear-gradient(135deg, ${C.purple}, ${C.purple2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>
+            <button onClick={() => router.push('/dashboard/anschreiben')} style={{ padding: '11px 18px', minHeight: 44, borderRadius: 9, background: `linear-gradient(135deg, ${C.purple}, ${C.purple2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', width: m ? '100%' : 'auto' }}>
               Jetzt erstellen →
             </button>
           </div>
@@ -2476,6 +2958,42 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
     }
   }
 
+  const modals = (
+    <>
+      {selectedJob && <JobDetailModal job={selectedJob} profile={profile} onClose={() => setSelectedJob(null)} />}
+      {applyJob && <ApplicationModal job={applyJob} profile={profile} isPro={isPro} applicationsCount={applications.length} onClose={() => setApplyJob(null)} onSuccess={() => { setApplyJob(null); router.refresh() }} />}
+      {showUpgrade && <UpgradeModal onClose={() => setShowUpgrade(false)} onUpgrade={() => setShowUpgrade(false)} />}
+      {globalToast && (
+        <div className="profile-save-toast" style={{ background: upgradeStatus === 'success' ? '#0D2A1A' : '#1a1a2e', color: upgradeStatus === 'success' ? '#4ade80' : '#8892A4', borderColor: upgradeStatus === 'success' ? '#2A6B47' : 'rgba(255,255,255,0.1)', fontSize: 14, maxWidth: 420, textAlign: 'center' }}>
+          {globalToast}
+        </div>
+      )}
+    </>
+  )
+
+  // ── Mobile layout ──────────────────────────────────────────────────────────
+  if (isMobile) {
+    return (
+      <>
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: C.bg, overflow: 'hidden' }}>
+          <MobileTopBar onHamburger={() => setDrawerOpen(true)} isPro={isPro} onUpgrade={() => setShowUpgrade(true)} />
+          <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '16px 16px 80px' }}>
+            {renderContent(true)}
+            {activeNav === 'dashboard' && (
+              <div style={{ marginTop: 24, borderTop: `0.5px solid ${C.border}`, paddingTop: 20 }}>
+                <RightSidebar applications={applications} profile={profile} onNav={handleNav} isMobile />
+              </div>
+            )}
+          </main>
+          <BottomNav active={activeNav} onNav={handleNav} />
+        </div>
+        {drawerOpen && <MobileDrawer active={activeNav} onNav={handleNav} profile={profile} isPro={isPro} onUpgrade={() => setShowUpgrade(true)} onLogout={handleLogout} onClose={() => setDrawerOpen(false)} />}
+        {modals}
+      </>
+    )
+  }
+
+  // ── Desktop layout (unchanged) ─────────────────────────────────────────────
   return (
     <>
       <div style={{ display: 'flex', height: '100vh', background: C.bg, overflow: 'hidden' }}>
@@ -2492,14 +3010,7 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
           </div>
         </div>
       </div>
-
-      {selectedJob && <JobDetailModal job={selectedJob} profile={profile} onClose={() => setSelectedJob(null)} />}
-      {showUpgrade && <UpgradeModal onClose={() => setShowUpgrade(false)} onUpgrade={() => setShowUpgrade(false)} />}
-      {globalToast && (
-        <div className="profile-save-toast" style={{ background: upgradeStatus === 'success' ? '#0D2A1A' : '#1a1a2e', color: upgradeStatus === 'success' ? '#4ade80' : '#8892A4', borderColor: upgradeStatus === 'success' ? '#2A6B47' : 'rgba(255,255,255,0.1)', fontSize: 14, maxWidth: 420, textAlign: 'center' }}>
-          {globalToast}
-        </div>
-      )}
+      {modals}
     </>
   )
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import type Stripe from 'stripe'
+import { sendProUpgradeEmail } from '@/lib/email'
 
 function createAdminClient() {
   return createServerClient(
@@ -47,6 +48,15 @@ export async function POST(request: NextRequest) {
       const userId = getUserId(session)
       if (userId && session.subscription) {
         await updateProStatus(userId, true, session.subscription as string)
+        // Send Pro upgrade confirmation email
+        const supabase = createAdminClient()
+        const { data: profile } = await supabase
+          .from('profiles').select('email, first_name').eq('id', userId).single()
+        if (profile?.email) {
+          sendProUpgradeEmail(userId, profile.email, profile.first_name || '').catch(e =>
+            console.error('Pro upgrade email failed:', e)
+          )
+        }
       }
       break
     }
