@@ -1636,6 +1636,9 @@ function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPh
     last_name: profile.last_name || '',
     phone: String(p.phone || ''),
     city: String(p.city || ''),
+    address: String(p.address || ''),
+    zip_code: String(p.zip_code || ''),
+    country: String(p.country || 'Österreich'),
     linkedin: String(p.linkedin || ''),
     birthday: String(p.birthday || ''),
   })
@@ -1711,9 +1714,21 @@ function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPh
   const initials = ((profile.first_name || '?').charAt(0) + (profile.last_name || '').charAt(0)).toUpperCase()
   const currentPhoto = photoPreview || existingAvatar || null
 
-  // Profile completion score
-  const completionFields = [form.first_name, form.last_name, form.phone, form.city, form.linkedin, prefs.industry, prefs.position, currentPhoto]
-  const completionScore = Math.round((completionFields.filter(Boolean).length / completionFields.length) * 100)
+  // Profile completion score — build a merged profile-like object from live form state
+  const completionScore = getProfileCompleteness({
+    ...profile,
+    first_name: form.first_name,
+    last_name: form.last_name,
+    phone: form.phone,
+    city: form.city,
+    address: form.address,
+    zip_code: form.zip_code,
+    photo_url: currentPhoto || profile.photo_url,
+    industry: prefs.industry,
+    position: prefs.position,
+    salary_target: prefs.salary_target,
+    work_model: prefs.work_model,
+  } as UserProfile).score
 
   const inStyle: React.CSSProperties = {
     width: '100%', padding: '10px 14px', minHeight: 44, borderRadius: 9,
@@ -1795,6 +1810,11 @@ function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPh
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
               {field('Telefon', 'phone', 'tel', '+43 ...')}
               {field('Stadt', 'city', 'text', 'Wien')}
+            </div>
+            {field('Adresse (Straße & Hausnummer)', 'address', 'text', 'Mariahilfer Straße 100')}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+              {field('PLZ', 'zip_code', 'text', '1060')}
+              {field('Land', 'country', 'text', 'Österreich')}
             </div>
             {field('LinkedIn', 'linkedin', 'url', 'https://linkedin.com/in/...')}
             {field('Geburtstag', 'birthday', 'date')}
@@ -1908,7 +1928,7 @@ function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPh
                 [currentPhoto, 'Profilfoto'],
                 [form.phone, 'Telefonnummer'],
                 [form.city, 'Stadt'],
-                [form.linkedin, 'LinkedIn'],
+                [form.address && form.zip_code, 'Adresse & PLZ'],
                 [prefs.industry, 'Branche'],
                 [prefs.position, 'Wunschposition'],
               ].map(([done, label]) => (
@@ -1942,9 +1962,10 @@ function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPh
             {[
               ['👤', [form.first_name, form.last_name].filter(Boolean).join(' ') || '—'],
               ['📍', form.city || '—'],
-              ['💼', prefs.position || '—'],
+              ['💼', prefs.position || String(p.current_position || '') || '—'],
               ['🏢', prefs.industry || '—'],
               ['💶', prefs.salary_target ? prefs.salary_target.toLocaleString('de') + ' €' : '—'],
+              ['🔄', prefs.work_model === 'remote' ? '🏠 Remote' : prefs.work_model === 'office' ? '🏢 Vor Ort' : prefs.work_model === 'hybrid' ? '🔄 Hybrid' : '—'],
             ].map(([icon, val]) => (
               <div key={String(icon)} style={{ display: 'flex', gap: 10, marginBottom: 8, alignItems: 'flex-start' }}>
                 <span style={{ fontSize: 13, flexShrink: 0 }}>{String(icon)}</span>

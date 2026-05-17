@@ -36,7 +36,7 @@ function DescBullets({ text, fs, ls, color }: { text: string; fs: number; ls: nu
   )
 }
 
-export default function ModernSplit({ firstName, lastName, email, phone, city, linkedin, photoUrl, position, profile, experience, education, skills, languages, fontFamily = 'Inter', fontSize = 'medium', lineSpacing = 'normal', sections }: CVProps) {
+export default function ModernSplit({ firstName, lastName, email, phone, city, address, zipCode, country, linkedin, photoUrl, position, profile, experience, education, skills, languages, fontFamily = 'Inter', fontSize = 'medium', lineSpacing = 'normal', sections }: CVProps) {
   const fsMap = { small: 11, medium: 13, large: 15 }
   const lsMap = { compact: 1.3, normal: 1.6, relaxed: 1.9 }
   const fs = fsMap[fontSize]
@@ -48,6 +48,7 @@ export default function ModernSplit({ firstName, lastName, email, phone, city, l
   const accent   = '#7B78CC'
   const lavender = '#B8B5E8'
   const dark     = '#2D2D2D'
+  const locationLine = address && zipCode ? `${address}, ${zipCode} ${city}${country && country !== 'Österreich' ? ', ' + country : ', Österreich'}` : city
 
   return (
     <div style={{ width: 794, height: 1123, backgroundColor: '#fff', fontFamily, fontSize: fs, lineHeight: ls, overflow: 'hidden', position: 'relative' }}>
@@ -65,10 +66,10 @@ export default function ModernSplit({ firstName, lastName, email, phone, city, l
           <div style={{ fontSize: 26, fontWeight: 800, color: dark, lineHeight: 1.1 }}>{firstName} {lastName}</div>
           {position && <div style={{ fontSize: 13, color: accent, marginTop: 4, fontWeight: 500 }}>{position}</div>}
           <div style={{ display: 'flex', gap: 14, marginTop: 6, flexWrap: 'wrap', fontSize: 10, color: '#666' }}>
-            {email    && <span>{email}</span>}
-            {phone    && <span>{phone}</span>}
-            {city     && <span>{city}</span>}
-            {linkedin && <span>{linkedin}</span>}
+            {email        && <span>{email}</span>}
+            {phone        && <span>{phone}</span>}
+            {locationLine && <span>{locationLine}</span>}
+            {linkedin     && <span>{linkedin}</span>}
           </div>
         </div>
       </div>

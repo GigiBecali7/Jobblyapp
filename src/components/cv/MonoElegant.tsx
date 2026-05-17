@@ -36,7 +36,7 @@ function DescBullets({ text, fs, ls }: { text: string; fs: number; ls: number })
   )
 }
 
-export default function MonoElegant({ firstName, lastName, email, phone, city, linkedin, photoUrl, position, profile, experience, education, skills, languages, fontFamily = 'Inter', fontSize = 'medium', lineSpacing = 'normal', sections }: CVProps) {
+export default function MonoElegant({ firstName, lastName, email, phone, city, address, zipCode, country, linkedin, photoUrl, position, profile, experience, education, skills, languages, fontFamily = 'Inter', fontSize = 'medium', lineSpacing = 'normal', sections }: CVProps) {
   const fsMap = { small: 11, medium: 13, large: 15 }
   const lsMap = { compact: 1.3, normal: 1.6, relaxed: 1.9 }
   const fs = fsMap[fontSize]
@@ -46,6 +46,7 @@ export default function MonoElegant({ firstName, lastName, email, phone, city, l
   const eduEntries = parseEdu(education)
 
   const navy = '#1B2E6B'
+  const locationLine = address && zipCode ? `${address}, ${zipCode} ${city}${country && country !== 'Österreich' ? ', ' + country : ', Österreich'}` : city
 
   return (
     <div style={{ width: 794, height: 1123, backgroundColor: '#fff', fontFamily, fontSize: fs, overflow: 'hidden' }}>
@@ -58,10 +59,10 @@ export default function MonoElegant({ firstName, lastName, email, phone, city, l
           <div style={{ fontSize: 28, fontWeight: 900, color: '#1a1a1a', lineHeight: 1, letterSpacing: -1 }}>{firstName} {lastName}</div>
           {position && <div style={{ fontSize: 13, color: '#888', marginTop: 6, textTransform: 'uppercase', letterSpacing: 2 }}>{position}</div>}
           <div style={{ display: 'flex', gap: 14, marginTop: 10, flexWrap: 'wrap', fontSize: 10, color: '#666' }}>
-            {email    && <span>{email}</span>}
-            {phone    && <span>{phone}</span>}
-            {city     && <span>{city}</span>}
-            {linkedin && <span>{linkedin}</span>}
+            {email        && <span>{email}</span>}
+            {phone        && <span>{phone}</span>}
+            {locationLine && <span>{locationLine}</span>}
+            {linkedin     && <span>{linkedin}</span>}
           </div>
         </div>
         <div style={{ marginLeft: 24, flexShrink: 0 }}>

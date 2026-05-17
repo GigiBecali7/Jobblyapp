@@ -56,7 +56,7 @@ function LangBar({ label, pct = 80 }: { label: string; pct?: number }) {
   )
 }
 
-export default function DarkPro({ firstName, lastName, email, phone, city, linkedin, photoUrl, position, profile, experience, education, skills, languages, fontFamily = 'Inter', fontSize = 'medium', lineSpacing = 'normal', sections }: CVProps) {
+export default function DarkPro({ firstName, lastName, email, phone, city, address, zipCode, country, linkedin, photoUrl, position, profile, experience, education, skills, languages, fontFamily = 'Inter', fontSize = 'medium', lineSpacing = 'normal', sections }: CVProps) {
   const fsMap = { small: 11, medium: 13, large: 15 }
   const lsMap = { compact: 1.3, normal: 1.6, relaxed: 1.9 }
   const fs = fsMap[fontSize]
@@ -66,6 +66,7 @@ export default function DarkPro({ firstName, lastName, email, phone, city, linke
   const eduEntries = parseEdu(education)
 
   const gold = '#C9A84C'
+  const locationLine = address && zipCode ? `${address}, ${zipCode} ${city}${country && country !== 'Österreich' ? ', ' + country : ', Österreich'}` : city
 
   const langList = languages
     ? languages.split(',').map(l => l.trim()).filter(Boolean)
@@ -92,11 +93,11 @@ export default function DarkPro({ firstName, lastName, email, phone, city, linke
         <div>
           <SidebarHead label={sections?.contact ?? DEFAULT_SECTIONS.contact} gold={gold} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {email    && <div style={{ fontSize: 10, color: '#bbb' }}>✉ {email}</div>}
-            {phone    && <div style={{ fontSize: 10, color: '#bbb' }}>☎ {phone}</div>}
-            {city     && <div style={{ fontSize: 10, color: '#bbb' }}>📍 {city}</div>}
-            {linkedin && <div style={{ fontSize: 10, color: '#bbb', wordBreak: 'break-all' }}>in {linkedin}</div>}
-            {!email && !phone && !city && !linkedin && <div style={{ fontSize: 10, color: '#555', fontStyle: 'italic' }}>—</div>}
+            {email        && <div style={{ fontSize: 10, color: '#bbb' }}>✉ {email}</div>}
+            {phone        && <div style={{ fontSize: 10, color: '#bbb' }}>☎ {phone}</div>}
+            {locationLine && <div style={{ fontSize: 10, color: '#bbb' }}>📍 {locationLine}</div>}
+            {linkedin     && <div style={{ fontSize: 10, color: '#bbb', wordBreak: 'break-all' }}>in {linkedin}</div>}
+            {!email && !phone && !locationLine && !linkedin && <div style={{ fontSize: 10, color: '#555', fontStyle: 'italic' }}>—</div>}
           </div>
         </div>
 

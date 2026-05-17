@@ -22,6 +22,9 @@ export interface CVProps {
   email: string
   phone: string
   city: string
+  address?: string
+  zipCode?: string
+  country?: string
   linkedin?: string
   photoUrl?: string
   position: string

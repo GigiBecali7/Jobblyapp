@@ -50,7 +50,7 @@ function ProgressBar({ label, pct = 80, navy }: { label: string; pct?: number; n
   )
 }
 
-export default function ExecutivePhoto({ firstName, lastName, email, phone, city, linkedin, photoUrl, position, profile, experience, education, skills, languages, fontFamily = 'Inter', fontSize = 'medium', lineSpacing = 'normal', sections }: CVProps) {
+export default function ExecutivePhoto({ firstName, lastName, email, phone, city, address, zipCode, country, linkedin, photoUrl, position, profile, experience, education, skills, languages, fontFamily = 'Inter', fontSize = 'medium', lineSpacing = 'normal', sections }: CVProps) {
   const fsMap = { small: 11, medium: 13, large: 15 }
   const lsMap = { compact: 1.3, normal: 1.6, relaxed: 1.9 }
   const fs = fsMap[fontSize]
@@ -62,6 +62,7 @@ export default function ExecutivePhoto({ firstName, lastName, email, phone, city
   const navy = '#1B2E6B'
   const accent = '#4A6FA5'
   const visibleSkills = skills.slice(0, 8)
+  const locationLine = address && zipCode ? `${address}, ${zipCode} ${city}${country && country !== 'Österreich' ? ', ' + country : ', Österreich'}` : city
 
   return (
     <div style={{ width: 794, height: 1123, backgroundColor: '#fff', fontFamily, fontSize: fs, overflow: 'hidden' }}>
@@ -82,11 +83,11 @@ export default function ExecutivePhoto({ firstName, lastName, email, phone, city
 
       {/* Contact bar */}
       <div style={{ backgroundColor: '#F0F3FA', padding: '9px 28px', display: 'flex', gap: 20, flexWrap: 'wrap', fontSize: 10, color: navy }}>
-        {email    && <span>✉ {email}</span>}
-        {phone    && <span>☎ {phone}</span>}
-        {city     && <span>📍 {city}</span>}
-        {linkedin && <span>in {linkedin}</span>}
-        {!email && !phone && !city && !linkedin && <span style={{ color: '#bbb', fontStyle: 'italic' }}>—</span>}
+        {email        && <span>✉ {email}</span>}
+        {phone        && <span>☎ {phone}</span>}
+        {locationLine && <span>📍 {locationLine}</span>}
+        {linkedin     && <span>in {linkedin}</span>}
+        {!email && !phone && !locationLine && !linkedin && <span style={{ color: '#bbb', fontStyle: 'italic' }}>—</span>}
       </div>
 
       {/* Body */}

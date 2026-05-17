@@ -93,7 +93,9 @@ function initFromProfile(profile: Record<string, unknown> | null): Omit<CVProps,
   return {
     firstName: String(p.first_name || ''), lastName: String(p.last_name || ''),
     email: String(p.email || ''), phone: String(p.phone || ''),
-    city: String(p.city || ''), linkedin: String(p.linkedin || ''),
+    city: String(p.city || ''), address: String(p.address || ''),
+    zipCode: String(p.zip_code || ''), country: String(p.country || 'Österreich'),
+    linkedin: String(p.linkedin || ''),
     photoUrl: String(p.avatar_url || p.photo_url || p.photo || ''), position: String(p.position || ''),
     profile: '', fontFamily: 'Inter', fontSize: 'medium', lineSpacing: 'normal',
   }
@@ -313,6 +315,7 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
     setFields({
       firstName: cv.data.firstName || '', lastName: cv.data.lastName || '',
       email: cv.data.email || '', phone: cv.data.phone || '', city: cv.data.city || '',
+      address: cv.data.address || '', zipCode: cv.data.zipCode || '', country: cv.data.country || 'Österreich',
       linkedin: cv.data.linkedin || '', photoUrl: cv.data.photoUrl || '', position: cv.data.position || '',
       profile: cv.data.profile || '',
       fontFamily: cv.data.fontFamily || 'Inter', fontSize: cv.data.fontSize || 'medium',
@@ -782,6 +785,29 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
                         {errors[k] && <div style={{ fontSize: 11, color: C.error, marginTop: 4 }}>{errors[k]}</div>}
                       </div>
                       )})}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14, marginTop: 14 }}>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={labelStyle}>Adresse (Straße & Hausnummer)<span style={{ color: C.error, marginLeft: 2 }}>*</span></label>
+                      <input value={fields.address || ''}
+                        onChange={e => { setFields(p => ({ ...p, address: e.target.value })); markDirty() }}
+                        placeholder="Mariahilfer Straße 100"
+                        style={inStyle} />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>PLZ<span style={{ color: C.error, marginLeft: 2 }}>*</span></label>
+                      <input value={fields.zipCode || ''}
+                        onChange={e => { setFields(p => ({ ...p, zipCode: e.target.value })); markDirty() }}
+                        placeholder="1060"
+                        style={inStyle} />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Land</label>
+                      <input value={fields.country || 'Österreich'}
+                        onChange={e => { setFields(p => ({ ...p, country: e.target.value })); markDirty() }}
+                        placeholder="Österreich"
+                        style={inStyle} />
+                    </div>
                   </div>
                 </Section>
 
