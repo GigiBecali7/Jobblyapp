@@ -60,8 +60,7 @@ export default function NordicMinimal({ firstName, lastName, email, phone, city,
             : <InitialsAvatar firstName={firstName} lastName={lastName} size={80} />
           }
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e', lineHeight: 1.2, fontFamily: 'Georgia, serif' }}>{firstName}</div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e', lineHeight: 1.2, fontFamily: 'Georgia, serif' }}>{lastName}</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e', lineHeight: 1.2, fontFamily: 'Georgia, serif', whiteSpace: 'nowrap' }}>{firstName} {lastName}</div>
             {position && <div style={{ fontSize: 11, color: navy, marginTop: 5, fontWeight: 500 }}>{position}</div>}
           </div>
         </div>

@@ -69,8 +69,7 @@ export default function ExecutivePhoto({ firstName, lastName, email, phone, city
       {/* Header */}
       <div style={{ display: 'flex', height: 190 }}>
         <div style={{ flex: 1, backgroundColor: navy, padding: '28px 28px', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
-          <div style={{ fontSize: 28, fontWeight: 900, color: '#fff', textTransform: 'uppercase', lineHeight: 1, letterSpacing: 1 }}>{firstName}</div>
-          <div style={{ fontSize: 28, fontWeight: 900, color: '#fff', textTransform: 'uppercase', lineHeight: 1, letterSpacing: 1 }}>{lastName}</div>
+          <div style={{ fontSize: 28, fontWeight: 900, color: '#fff', textTransform: 'uppercase', lineHeight: 1, letterSpacing: 1, whiteSpace: 'nowrap' }}>{firstName} {lastName}</div>
           {position && <div style={{ fontSize: 12, color: '#8BA3D4', marginTop: 7 }}>{position}</div>}
         </div>
         <div style={{ width: '38%', overflow: 'hidden' }}>

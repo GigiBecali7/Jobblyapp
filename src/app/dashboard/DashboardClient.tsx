@@ -263,9 +263,9 @@ function BottomNav({ active, onNav }: { active: NavId; onNav: (id: NavId) => voi
 }
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
-function Sidebar({ active, onNav, profile, isPro, onUpgrade, onLogout, jobCount }: {
+function Sidebar({ active, onNav, profile, isPro, onUpgrade, onLogout, jobCount, avatarUrl }: {
   active: NavId; onNav: (id: NavId) => void
-  profile: UserProfile; isPro: boolean; onUpgrade: () => void; onLogout: () => void; jobCount?: number
+  profile: UserProfile; isPro: boolean; onUpgrade: () => void; onLogout: () => void; jobCount?: number; avatarUrl?: string
 }) {
   const [showPopup, setShowPopup] = useState(false)
   const router = useRouter()
@@ -335,12 +335,14 @@ function Sidebar({ active, onNav, profile, isPro, onUpgrade, onLogout, jobCount 
       {/* User footer with hover popup */}
       <div style={{ padding: '12px 14px', borderTop: `0.5px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 10, position: 'relative' }}>
         <div
-          style={{ width: 34, height: 34, borderRadius: '50%', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: C.white, flexShrink: 0, cursor: 'pointer', position: 'relative' }}
+          style={{ width: 34, height: 34, borderRadius: '50%', background: avatarUrl ? 'transparent' : 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: C.white, flexShrink: 0, cursor: 'pointer', position: 'relative', overflow: 'hidden' }}
           onMouseEnter={() => setShowPopup(true)}
           onMouseLeave={() => setShowPopup(false)}
           onClick={() => { setShowPopup(false); onNav('profile') }}
         >
-          {initials}
+          {avatarUrl
+            ? <img src={avatarUrl} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            : initials}
           {showPopup && <AvatarPopup profile={profile} isPro={isPro} onNavigate={() => { setShowPopup(false); onNav('profile') }} side="left" />}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -1625,11 +1627,10 @@ function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPh
   const [pwSent, setPwSent] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
-  const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [photoUploading, setPhotoUploading] = useState(false)
 
   const p = profile as UserProfile & Record<string, string | number | boolean>
-  const existingAvatar = String(p.photo_url || p.avatar_url || '')
+  const [existingAvatar, setExistingAvatar] = useState(String(p.photo_url || p.avatar_url || ''))
 
   const [form, setForm] = useState({
     first_name: profile.first_name || '',
@@ -1661,15 +1662,38 @@ function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPh
     }
   }
 
-  function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    setPhotoFile(file)
-    setPhotoPreview(URL.createObjectURL(file))
+    const objectUrl = URL.createObjectURL(file)
+    setPhotoPreview(objectUrl)
+    setPhotoUploading(true)
+    try {
+      const ext = file.name.split('.').pop() || 'jpg'
+      const path = `${profile.id}/profile.${ext}`
+      const { data: uploadData, error: uploadErr } = await supabase.storage
+        .from('avatars')
+        .upload(path, file, { upsert: true })
+      if (uploadErr) {
+        console.error('Photo upload error:', uploadErr.message)
+        return
+      }
+      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(uploadData!.path)
+      const url = `${urlData.publicUrl}?t=${Date.now()}`
+      await supabase.from('profiles').update({ photo_url: url, avatar_url: url } as Record<string, unknown>).eq('id', profile.id)
+      setExistingAvatar(url)
+      setPhotoPreview(url)
+      if (onPhotoUpdate) onPhotoUpdate(url)
+    } catch (err) {
+      console.error('Photo upload exception:', err)
+    } finally {
+      setPhotoUploading(false)
+    }
   }
 
   async function deletePhoto() {
-    setPhotoPreview(null); setPhotoFile(null)
+    setPhotoPreview(null)
+    setExistingAvatar('')
     await supabase.from('profiles').update({ photo_url: null, avatar_url: null } as Record<string, unknown>).eq('id', profile.id)
     if (onPhotoUpdate) onPhotoUpdate('')
   }
@@ -1677,31 +1701,12 @@ function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPh
   async function save() {
     setSaving(true); setSaved(false)
     try {
-      let finalPhotoUrl = existingAvatar
-      if (photoFile) {
-        setPhotoUploading(true)
-        const ext = photoFile.name.split('.').pop() || 'jpg'
-        const path = `${profile.id}/avatar.${ext}`
-        const { data: uploadData, error: uploadErr } = await supabase.storage
-          .from('avatars')
-          .upload(path, photoFile, { upsert: true })
-        if (uploadErr) {
-          console.error('Photo upload error:', uploadErr.message)
-          // Still proceed with saving other form fields
-        } else if (uploadData) {
-          const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(uploadData.path)
-          // Append cache-bust so browser re-fetches updated avatar
-          finalPhotoUrl = `${urlData.publicUrl}?t=${Date.now()}`
-        }
-        setPhotoUploading(false)
-      }
       await supabase.from('profiles').update({
         ...form, ...prefs, ...notifications,
-        ...(finalPhotoUrl ? { photo_url: finalPhotoUrl, avatar_url: finalPhotoUrl } : {}),
+        ...(existingAvatar ? { photo_url: existingAvatar, avatar_url: existingAvatar } : {}),
       } as Record<string, unknown>).eq('id', profile.id)
-      if (finalPhotoUrl && photoFile && onPhotoUpdate) onPhotoUpdate(finalPhotoUrl)
       setSaved(true); setTimeout(() => setSaved(false), 3000)
-    } finally { setSaving(false); setPhotoUploading(false) }
+    } finally { setSaving(false) }
   }
 
   async function sendPwReset() {
@@ -1893,7 +1898,7 @@ function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPh
 
           <button onClick={save} disabled={saving}
             style={{ width: '100%', padding: 15, minHeight: 50, borderRadius: 10, background: saving ? 'rgba(255,255,255,0.06)' : `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: saving ? C.mid : C.white, border: 'none', cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-            {saving ? (photoUploading ? '📷 Foto hochladen…' : 'Speichern…') : '💾 Änderungen speichern'}
+            {photoUploading ? '📷 Foto hochladen…' : saving ? 'Speichern…' : '💾 Änderungen speichern'}
           </button>
         </div>
 
@@ -3018,7 +3023,7 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
   return (
     <>
       <div style={{ display: 'flex', height: '100vh', background: C.bg, overflow: 'hidden' }}>
-        <Sidebar active={activeNav} onNav={handleNav} profile={profile} isPro={isPro} onUpgrade={() => setShowUpgrade(true)} onLogout={handleLogout} jobCount={dashJobs.length} />
+        <Sidebar active={activeNav} onNav={handleNav} profile={profile} isPro={isPro} onUpgrade={() => setShowUpgrade(true)} onLogout={handleLogout} jobCount={dashJobs.length} avatarUrl={avatarUrl} />
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
           <TopBar profile={profile} isPro={isPro} onUpgrade={() => setShowUpgrade(true)} onNav={handleNav} onSearch={term => { setGlobalSearch(term); setActiveNav('jobs') }} avatarUrl={avatarUrl} />

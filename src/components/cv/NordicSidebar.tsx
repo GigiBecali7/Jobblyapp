@@ -70,8 +70,7 @@ export default function NordicSidebar({ firstName, lastName, email, phone, city,
             : <InitialsAvatar firstName={firstName} lastName={lastName} size={88} color={accent} />
           }
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 20, fontWeight: 700, color: dark, lineHeight: 1.2, fontFamily: 'Georgia, serif' }}>{firstName}</div>
-            <div style={{ fontSize: 20, fontWeight: 700, color: dark, lineHeight: 1.2, fontFamily: 'Georgia, serif' }}>{lastName}</div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: dark, lineHeight: 1.2, fontFamily: 'Georgia, serif', whiteSpace: 'nowrap' }}>{firstName} {lastName}</div>
             {position && <div style={{ fontSize: 11, color: accent, marginTop: 5, fontWeight: 500 }}>{position}</div>}
           </div>
         </div>

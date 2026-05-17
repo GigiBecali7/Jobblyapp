@@ -82,8 +82,7 @@ export default function DarkPro({ firstName, lastName, email, phone, city, addre
             : <InitialsAvatar firstName={firstName} lastName={lastName} size={84} />
           }
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 18, fontWeight: 800, color: '#fff', lineHeight: 1.2 }}>{firstName}</div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: '#fff', lineHeight: 1.2 }}>{lastName}</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: '#fff', lineHeight: 1.2, whiteSpace: 'nowrap' }}>{firstName} {lastName}</div>
             {position && <div style={{ fontSize: 10, color: gold, marginTop: 5 }}>{position}</div>}
           </div>
         </div>

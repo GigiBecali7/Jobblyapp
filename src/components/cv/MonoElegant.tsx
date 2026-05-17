@@ -56,7 +56,7 @@ export default function MonoElegant({ firstName, lastName, email, phone, city, a
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '26px 36px 18px' }}>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 28, fontWeight: 900, color: '#1a1a1a', lineHeight: 1, letterSpacing: -1 }}>{firstName} {lastName}</div>
+          <div style={{ fontSize: 28, fontWeight: 900, color: '#1a1a1a', lineHeight: 1, letterSpacing: -1, whiteSpace: 'nowrap' }}>{firstName} {lastName}</div>
           {position && <div style={{ fontSize: 13, color: '#888', marginTop: 6, textTransform: 'uppercase', letterSpacing: 2 }}>{position}</div>}
           <div style={{ display: 'flex', gap: 14, marginTop: 10, flexWrap: 'wrap', fontSize: 10, color: '#666' }}>
             {email        && <span>{email}</span>}

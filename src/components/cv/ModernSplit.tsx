@@ -63,7 +63,7 @@ export default function ModernSplit({ firstName, lastName, email, phone, city, a
           : <InitialsAvatar firstName={firstName} lastName={lastName} size={80} />
         }
         <div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: dark, lineHeight: 1.1 }}>{firstName} {lastName}</div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: dark, lineHeight: 1.1, whiteSpace: 'nowrap' }}>{firstName} {lastName}</div>
           {position && <div style={{ fontSize: 13, color: accent, marginTop: 4, fontWeight: 500 }}>{position}</div>}
           <div style={{ display: 'flex', gap: 14, marginTop: 6, flexWrap: 'wrap', fontSize: 10, color: '#666' }}>
             {email        && <span>{email}</span>}

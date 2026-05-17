@@ -59,6 +59,17 @@ const DESIGNS: { id: CVDesign; label: string; desc: string; proOnly: boolean; ac
 const FONT_FAMILIES: FontFamily[] = ['Inter', 'Georgia', 'Playfair Display', 'Roboto', 'Lato', 'Montserrat']
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+async function fetchImageAsBase64(url: string): Promise<string> {
+  const res = await fetch(url)
+  const blob = await res.blob()
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onloadend = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(blob)
+  })
+}
+
 function serializeExp(entries: ExpEntry[]): string {
   return entries
     .filter(e => e.title || e.company || e.description)
@@ -457,7 +468,16 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
         if (json.cvData.profile) setProfileText(json.cvData.profile)
         if (json.cvData.skills?.length) setSkillTags(json.cvData.skills)
         if (json.cvData.experience && !expEntries.some(e => e.description.length > 20)) {
-          setExpEntries(prev => prev.map((e, i) => i === 0 ? { ...e, description: json.cvData.experience } : e))
+          // Only keep bullet lines — strip any "Title | Company" or date-range lines the AI may include
+          const rawExp: string = json.cvData.experience
+          const bulletLines = rawExp.split('\n').filter(l => {
+            const t = l.trim()
+            if (!t) return false
+            if (t.includes(' | ') && !t.startsWith('•') && !t.startsWith('-')) return false
+            if (/^\d{4}\s*[–\-—]\s*(\d{4}|heute|present|aktuell)/i.test(t)) return false
+            return true
+          }).join('\n')
+          setExpEntries(prev => prev.map((e, i) => i === 0 ? { ...e, description: bulletLines || rawExp } : e))
         }
         trackEvent('StartTrial')
         showToast('KI-Inhalt generiert! ✓')
@@ -531,10 +551,31 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
       const { default: jsPDF }       = await import('jspdf')
       const el = document.getElementById('cv-pdf-capture')
       if (!el) { showToast(t.toastPdfError, false); return }
-      const canvas = await html2canvas(el, { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff' })
+
+      // Pre-convert cross-origin images to base64 so html2canvas can embed them
+      const imgs = Array.from(el.querySelectorAll('img'))
+      const origSrcs: string[] = []
+      for (const img of imgs) {
+        origSrcs.push(img.src)
+        if (img.src && !img.src.startsWith('data:') && !img.src.startsWith('blob:')) {
+          try {
+            img.src = await fetchImageAsBase64(img.src)
+          } catch { /* keep original if fetch fails */ }
+        }
+      }
+      // Wait for all images to finish loading
+      await Promise.all(imgs.map(img => new Promise<void>(resolve => {
+        if (img.complete) { resolve(); return }
+        img.onload = () => resolve(); img.onerror = () => resolve()
+      })))
+
+      const canvas = await html2canvas(el, { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff', allowTaint: true })
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
       pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, pdf.internal.pageSize.getWidth(), pdf.internal.pageSize.getHeight())
       pdf.save(`lebenslauf-${fields.lastName || 'export'}.pdf`)
+
+      // Restore original srcs
+      imgs.forEach((img, i) => { img.src = origSrcs[i] })
     } catch { showToast(t.toastPdfError, false) }
     finally { setExporting(false) }
   }
