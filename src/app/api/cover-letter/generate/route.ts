@@ -3,43 +3,48 @@ import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@/lib/supabase/server'
 import { checkAndIncrementAIRate } from '@/lib/rateLimit'
 import { sanitizeText } from '@/lib/sanitize'
+import { validateProfileForAI } from '@/lib/validateProfileForAI'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
+    const { data: { user }, error: authErr } = await supabase.auth.getUser()
+    if (authErr || !user) return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
+
+    const body = await request.json()
+    const jobTitle = sanitizeText(body.jobTitle, 200)
+    const company  = sanitizeText(body.company, 200)
+    const lang     = sanitizeText(body.lang, 5) || 'de'
+
+    // Validate form inputs first
+    if (!jobTitle || !company) {
+      const missing = [
+        ...(!jobTitle ? [{ field: 'jobTitle', label: 'Stellenbezeichnung' }] : []),
+        ...(!company  ? [{ field: 'company',  label: 'Unternehmen' }] : []),
+      ]
+      return NextResponse.json({ error: 'Stelle und Unternehmen sind erforderlich.', missing, action: 'fill_form' }, { status: 422 })
+    }
+
+    // Validate profile completeness
+    const validation = await validateProfileForAI(supabase, user.id, user.email ?? '')
+    if (!validation.valid) {
+      console.warn('cover-letter/generate: profile incomplete for user', user.id, validation.missing.map(m => m.label))
+      return NextResponse.json({
+        error: `Für das Anschreiben fehlen noch: ${validation.missing.map(m => m.label).join(', ')}.`,
+        missing: validation.missing,
+        action: 'complete_profile',
+      }, { status: 422 })
+    }
 
     const { data: profileRow } = await supabase
       .from('profiles')
-      .select('is_pro, first_name, last_name, position, current_position')
+      .select('is_pro, first_name, last_name, city, position, current_position, experience, skills')
       .eq('id', user.id)
       .single()
 
     const isPro = profileRow?.is_pro === true || user.email === 'drthinkbyte@gmail.com'
-
-    const body = await request.json()
-    const jobTitle    = sanitizeText(body.jobTitle, 200)
-    const company     = sanitizeText(body.company, 200)
-    const userProfile = sanitizeText(body.userProfile, 3000)
-    const lang        = sanitizeText(body.lang, 5)
-
-    // Server-side validation — block AI call if required fields are missing
-    const missing: string[] = []
-    if (!jobTitle)  missing.push('Job-Titel')
-    if (!company)   missing.push('Unternehmen')
-    if (!profileRow?.first_name || !profileRow?.last_name) missing.push('Vor- und Nachname im Profil')
-    if (!profileRow?.position && !profileRow?.current_position) missing.push('Wunschposition oder aktueller Job-Titel')
-
-    if (missing.length > 0) {
-      return NextResponse.json({
-        error: `Für das Anschreiben fehlen noch: ${missing.join(', ')}.`,
-        missing,
-        action: 'complete_profile',
-      }, { status: 422 })
-    }
 
     // Rate limiting
     const rate = await checkAndIncrementAIRate(supabase, user.id, isPro)
@@ -47,37 +52,69 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: rate.message, action: 'upgrade' }, { status: 429 })
     }
 
-    const langInstructions: Record<string, string> = {
-      de: 'Schreibe auf Deutsch.',
-      en: 'Write in English.',
-      tr: 'Türkçe yaz.',
-      es: 'Escribe en español.',
-      fr: 'Écris en français.',
-      pl: 'Pisz po polsku.',
+    const firstName   = sanitizeText(String(profileRow?.first_name || ''), 100)
+    const lastName    = sanitizeText(String(profileRow?.last_name || ''), 100)
+    const city        = sanitizeText(String(profileRow?.city || ''), 100)
+    const currentRole = sanitizeText(String(profileRow?.position || profileRow?.current_position || ''), 200)
+    const experience  = sanitizeText(String(profileRow?.experience || ''), 3000)
+    const rawSkills   = profileRow?.skills
+    const skills      = Array.isArray(rawSkills)
+      ? (rawSkills as string[]).slice(0, 10).join(', ')
+      : sanitizeText(String(rawSkills || ''), 500)
+
+    const langMap: Record<string, string> = {
+      de: 'Deutsch', en: 'Englisch', tr: 'Türkisch', es: 'Spanisch', fr: 'Französisch', pl: 'Polnisch',
     }
-    const langNote = langInstructions[lang] || langInstructions.de
+    const targetLang = langMap[lang] || 'Deutsch'
 
-    const prompt = `Du bist ein professioneller Bewerbungsschreiber. ${langNote}
+    const prompt = `Du bist ein professioneller Bewerbungsschreiber für den österreichischen und deutschen Arbeitsmarkt.
+Schreibe auf ${targetLang}.
 
+BEWERBER:
+Name: ${firstName} ${lastName}
+Wohnort: ${city}
+Position / Wunschstelle: ${currentRole}
+Berufserfahrung: ${experience || '–'}
+Kenntnisse: ${skills || '–'}
+
+AUSGESCHRIEBENE STELLE:
 Stelle: ${jobTitle}
 Unternehmen: ${company}
-Bewerber-Profil: ${userProfile}
 
-Schreibe 3-4 professionelle Absätze. Kein Kriechertum, keine Floskeln. Direkt, authentisch, überzeugend.
-Antworte NUR mit dem Anschreiben-Text, ohne Betreff, Anrede oder Grußformel.`
+Schreibe ein professionelles Bewerbungsschreiben nach DIN 5008. Halte GENAU diese Struktur:
+
+Absatz 1 (2 Sätze): Direkter Bezug auf die Stelle "${jobTitle}" bei ${company} — konkret, kein Floskeln.
+Absatz 2 (3-4 Sätze): Motivation — warum genau ${company}, warum diese Rolle.
+Absatz 3 (3-4 Sätze): Qualifikationen — relevante Erfahrung und Kenntnisse, direkt auf "${jobTitle}" bezogen.
+Absatz 4 (1-2 Sätze): Einladung zum persönlichen Gespräch.
+
+STRIKTE REGELN:
+- KEINE Anrede ("Sehr geehrte...") — wird separat eingefügt
+- KEINE Grußformel ("Mit freundlichen Grüßen") — wird separat eingefügt
+- NIEMALS Floskeln: "hiermit bewerbe ich mich", "mit großem Interesse", "ich bin überzeugt", "ich bin begeistert"
+- Jeder Satz muss sich direkt auf "${jobTitle}" bei "${company}" beziehen
+- Maximal 220 Wörter
+- Nur den Fließtext (4 Absätze), keine Formatierung, keine Überschriften, keine Aufzählungen`
 
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 800,
+      max_tokens: 900,
       messages: [{ role: 'user', content: prompt }],
     })
 
-    const text = message.content.map((c) => (c.type === 'text' ? c.text : '')).join('')
+    const text = message.content.map(c => (c.type === 'text' ? c.text : '')).join('').trim()
+    if (!text) {
+      console.error('cover-letter/generate: empty response from Anthropic')
+      return NextResponse.json({ error: 'KI-Generierung vorübergehend nicht verfügbar. Bitte versuche es in ein paar Minuten erneut.' }, { status: 503 })
+    }
 
-    return NextResponse.json({ coverLetter: text.trim() })
+    return NextResponse.json({ coverLetter: text })
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error)
-    console.error('Cover letter generate error:', msg)
+    console.error('cover-letter/generate error:', msg)
+    if (msg.includes('api_key') || msg.includes('authentication')) {
+      return NextResponse.json({ error: 'KI-Generierung vorübergehend nicht verfügbar. Bitte versuche es in ein paar Minuten erneut.' }, { status: 503 })
+    }
     return NextResponse.json({ error: 'Generierung fehlgeschlagen. Bitte versuche es erneut.' }, { status: 500 })
   }
 }
