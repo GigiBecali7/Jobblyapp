@@ -44,7 +44,10 @@ export async function POST(req: NextRequest) {
           updated_at: new Date().toISOString(),
         }).eq('id', id).eq('user_id', user.id).select().single()
 
-      if (updateErr) throw updateErr
+      if (updateErr) {
+        console.error('cvs update error:', updateErr.message, '| code:', updateErr.code, '| details:', updateErr.details, '| hint:', updateErr.hint)
+        throw updateErr
+      }
       return NextResponse.json({ cv: updated })
     } else {
       // Create new CV — check count limit
@@ -64,11 +67,15 @@ export async function POST(req: NextRequest) {
           user_id: user.id, title: title.trim(), design, content, edit_count: 0,
         }).select().single()
 
-      if (insertErr) throw insertErr
+      if (insertErr) {
+        console.error('cvs insert error:', insertErr.message, '| code:', insertErr.code, '| details:', insertErr.details, '| hint:', insertErr.hint)
+        throw insertErr
+      }
       return NextResponse.json({ cv: created })
     }
   } catch (e) {
-    console.error('cv/save error:', e)
-    return NextResponse.json({ error: 'Server-Fehler' }, { status: 500 })
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error('cv/save error:', msg)
+    return NextResponse.json({ error: 'Server-Fehler beim Speichern. Bitte versuche es erneut.' }, { status: 500 })
   }
 }

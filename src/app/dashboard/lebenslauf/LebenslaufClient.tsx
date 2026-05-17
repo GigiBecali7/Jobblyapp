@@ -185,6 +185,7 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
   const [exporting, setExporting]   = useState(false)
   const [toast, setToast]           = useState<{ msg: string; ok: boolean } | null>(null)
   const [isDirty, setIsDirty]       = useState(false)
+  const [validModal, setValidModal] = useState<string[] | null>(null)
   const skillInputRef = useRef<HTMLInputElement>(null)
   const autoSaveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   // Stable ref so handleAutoSave doesn't re-create on every render
@@ -405,7 +406,8 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
   function validate(): boolean {
     const errs: Record<string, string> = {}
     if (!fields.firstName.trim()) errs.firstName = t.errorFirstName
-    if (!fields.position.trim()) errs.position = t.errorPosition
+    if (!fields.lastName.trim())  errs.lastName  = 'Nachname erforderlich'
+    if (!fields.position.trim())  errs.position  = t.errorPosition
     const hasExp = expEntries.some(e => e.title.trim() || e.company.trim())
     const hasEdu = eduEntries.some(e => e.degree.trim() || e.institution.trim())
     if (!hasExp && !hasEdu) errs.experience = t.errorExperience
@@ -413,9 +415,24 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
     return Object.keys(errs).length === 0
   }
 
+  function validateForAI(): string[] {
+    const missing: string[] = []
+    if (!fields.firstName.trim()) missing.push('Vorname')
+    if (!fields.lastName.trim())  missing.push('Nachname')
+    if (!fields.email.trim())     missing.push('E-Mail-Adresse')
+    if (!fields.phone.trim())     missing.push('Telefonnummer')
+    if (!fields.city.trim())      missing.push('Wohnort / Stadt')
+    if (!fields.position.trim())  missing.push('Wunschposition')
+    const hasExp = expEntries.some(e => e.title.trim() && e.company.trim())
+    const hasEdu = eduEntries.some(e => e.degree.trim() && e.institution.trim())
+    if (!hasExp && !hasEdu) missing.push('mindestens eine Berufserfahrung (Titel + Firma) oder Ausbildung (Abschluss + Institution)')
+    return missing
+  }
+
   // ── AI Generation ──
   async function handleGenerate() {
-    if (!validate()) return
+    const aiMissing = validateForAI()
+    if (aiMissing.length > 0) { setValidModal(aiMissing); return }
     setGenerating(true)
     try {
       const res = await fetch('/api/cv/generate', {
@@ -436,12 +453,17 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
       if (json.cvData) {
         if (json.cvData.profile) setProfileText(json.cvData.profile)
         if (json.cvData.skills?.length) setSkillTags(json.cvData.skills)
-        // If experience/education were enhanced, merge into first entry description
         if (json.cvData.experience && !expEntries.some(e => e.description.length > 20)) {
           setExpEntries(prev => prev.map((e, i) => i === 0 ? { ...e, description: json.cvData.experience } : e))
         }
         trackEvent('StartTrial')
         showToast('KI-Inhalt generiert! ✓')
+      } else if (json.action === 'complete_profile' && json.missing) {
+        setValidModal((json.missing as Array<{ label: string }>).map(m => m.label))
+      } else if (json.action === 'upgrade') {
+        showToast(json.error || 'Tageslimit erreicht. Upgrade zu Pro!', false)
+      } else {
+        showToast(json.error || t.toastGenerateError, false)
       }
     } catch { showToast(t.toastGenerateError, false) }
     finally { setGenerating(false) }
@@ -562,6 +584,28 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
       {toast && (
         <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 9999, padding: '12px 20px', borderRadius: 10, fontSize: 14, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 8, backgroundColor: toast.ok ? '#0D2A1A' : '#2A0D0D', color: toast.ok ? C.success : C.error, border: `1px solid ${toast.ok ? '#2A6B47' : '#6B2A2A'}` }}>
           {toast.msg}
+        </div>
+      )}
+
+      {/* Validation Modal */}
+      {validModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', zIndex: 9000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+          onClick={e => { if (e.target === e.currentTarget) setValidModal(null) }}>
+          <div style={{ backgroundColor: C.card, border: `1px solid rgba(248,113,113,0.3)`, borderRadius: 16, padding: 32, maxWidth: 460, width: '100%' }}>
+            <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>Bitte fülle alle Pflichtfelder aus</div>
+            <div style={{ fontSize: 13, color: C.mid, marginBottom: 20 }}>Für eine professionelle KI-Generierung werden folgende Angaben benötigt:</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24 }}>
+              {validModal.map((label, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: C.error }}>
+                  <span style={{ fontSize: 10 }}>✕</span> {label}
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <a href="/dashboard/meine-daten" style={{ ...btnPrimary(C.navy), textDecoration: 'none', flex: 1, textAlign: 'center', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>Felder ausfüllen →</a>
+              <button onClick={() => setValidModal(null)} style={{ ...btnSecondary, flex: 1 }}>Schließen</button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -727,15 +771,17 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
                       ['email', t.email], ['phone', t.phone],
                       ['city', t.city], ['linkedinUrl', t.linkedinUrl],
                       ['position', t.position], ['photoUrl', t.photoUrl],
-                    ] as [keyof typeof fields, string][]).map(([k, label]) => (
+                    ] as [keyof typeof fields, string][]).map(([k, label]) => {
+                      const required = ['firstName', 'lastName', 'email', 'phone', 'city', 'position'].includes(k as string)
+                      return (
                       <div key={k}>
-                        <label style={labelStyle}>{label}</label>
+                        <label style={labelStyle}>{label}{required && <span style={{ color: C.error, marginLeft: 2 }}>*</span>}</label>
                         <input value={(fields[k] as string) || ''}
                           onChange={e => { setFields(p => ({ ...p, [k]: e.target.value })); if (errors[k]) setErrors(p => ({ ...p, [k]: '' })); markDirty() }}
                           style={{ ...inStyle, borderColor: errors[k] ? C.error : 'rgba(255,255,255,0.1)' }} />
                         {errors[k] && <div style={{ fontSize: 11, color: C.error, marginTop: 4 }}>{errors[k]}</div>}
                       </div>
-                    ))}
+                      )})}
                   </div>
                 </Section>
 
@@ -871,7 +917,7 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
                     style={{ ...btnPrimary('#10b981'), opacity: generating ? 0.7 : 1, cursor: generating ? 'not-allowed' : 'pointer' }}>
                     {generating ? t.generating : t.generateAI}
                   </button>
-                  <button onClick={() => { if (validate()) setStep(3) }} style={btnPrimary()}>{t.preview}</button>
+                  <button onClick={() => { const m = validateForAI(); if (m.length > 0) { setValidModal(m); return } if (validate()) setStep(3) }} style={btnPrimary()}>{t.preview}</button>
                 </div>
               </div>
             )}

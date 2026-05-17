@@ -13,11 +13,34 @@ function InitialsAvatar({ firstName, lastName, size = 80 }: { firstName: string;
   )
 }
 
-function StarRating({ label, stars = 4 }: { label: string; stars?: number }) {
+function SidebarHead({ label, gold }: { label: string; gold: string }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
-      <span style={{ fontSize: 11, color: '#ccc' }}>{label}</span>
-      <span style={{ color: '#C9A84C', fontSize: 10 }}>{'★'.repeat(stars)}{'☆'.repeat(5 - stars)}</span>
+    <div style={{ marginBottom: 8 }}>
+      <div style={{ fontSize: 9, fontWeight: 700, color: gold, textTransform: 'uppercase', letterSpacing: 2 }}>{label}</div>
+      <div style={{ height: 1, backgroundColor: gold, marginTop: 3, opacity: 0.5 }} />
+    </div>
+  )
+}
+
+function MainHead({ label, gold }: { label: string; gold: string }) {
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ fontSize: 9, fontWeight: 700, color: '#aaa', textTransform: 'uppercase', letterSpacing: 2 }}>{label}</div>
+      <div style={{ height: 1, backgroundColor: gold, marginTop: 3, opacity: 0.6 }} />
+    </div>
+  )
+}
+
+function DescBullets({ text, fs, ls }: { text: string; fs: number; ls: number }) {
+  const lines = text.split('\n').map(l => l.trim().replace(/^[•\-–*]\s*/, '')).filter(Boolean)
+  return (
+    <div style={{ marginTop: 4 }}>
+      {lines.map((line, i) => (
+        <div key={i} style={{ display: 'flex', gap: 5, marginBottom: 3, alignItems: 'flex-start' }}>
+          <span style={{ fontSize: 8, color: '#aaa', marginTop: 3, flexShrink: 0 }}>•</span>
+          <span style={{ fontSize: fs - 1, color: '#ccc', lineHeight: ls }}>{line}</span>
+        </div>
+      ))}
     </div>
   )
 }
@@ -25,9 +48,9 @@ function StarRating({ label, stars = 4 }: { label: string; stars?: number }) {
 function LangBar({ label, pct = 80 }: { label: string; pct?: number }) {
   return (
     <div style={{ marginBottom: 6 }}>
-      <div style={{ fontSize: 11, color: '#ccc', marginBottom: 2 }}>{label}</div>
-      <div style={{ height: 4, backgroundColor: '#555', borderRadius: 2 }}>
-        <div style={{ height: 4, width: `${pct}%`, backgroundColor: '#C9A84C', borderRadius: 2 }} />
+      <div style={{ fontSize: 10, color: '#ccc', marginBottom: 2 }}>{label}</div>
+      <div style={{ height: 3, backgroundColor: '#555', borderRadius: 2 }}>
+        <div style={{ height: 3, width: `${pct}%`, backgroundColor: '#C9A84C', borderRadius: 2 }} />
       </div>
     </div>
   )
@@ -35,7 +58,7 @@ function LangBar({ label, pct = 80 }: { label: string; pct?: number }) {
 
 export default function DarkPro({ firstName, lastName, email, phone, city, linkedin, photoUrl, position, profile, experience, education, skills, languages, fontFamily = 'Inter', fontSize = 'medium', lineSpacing = 'normal', sections }: CVProps) {
   const fsMap = { small: 11, medium: 13, large: 15 }
-  const lsMap = { compact: 1.3, normal: 1.5, relaxed: 1.8 }
+  const lsMap = { compact: 1.3, normal: 1.6, relaxed: 1.9 }
   const fs = fsMap[fontSize]
   const ls = lsMap[lineSpacing]
 
@@ -49,92 +72,105 @@ export default function DarkPro({ firstName, lastName, email, phone, city, linke
     : []
 
   return (
-    <div style={{ width: 794, height: 1123, display: 'flex', fontFamily, fontSize: fs, overflow: 'hidden', backgroundColor: '#fff' }}>
+    <div style={{ width: 794, height: 1123, display: 'flex', fontFamily, fontSize: fs, overflow: 'hidden', backgroundColor: '#1E1E1E' }}>
       {/* Sidebar */}
-      <div style={{ width: '33%', backgroundColor: '#3D3D3D', padding: '32px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ width: '32%', backgroundColor: '#2A2A2A', padding: '32px 18px', display: 'flex', flexDirection: 'column', gap: 18 }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
           {photoUrl
-            ? <img src={photoUrl} alt="photo" style={{ width: 88, height: 88, borderRadius: '50%', objectFit: 'cover', border: `3px solid ${gold}` }} />
-            : <InitialsAvatar firstName={firstName} lastName={lastName} size={88} />
+            ? <img src={photoUrl} alt="photo" style={{ width: 84, height: 84, borderRadius: '50%', objectFit: 'cover', border: `3px solid ${gold}` }} />
+            : <InitialsAvatar firstName={firstName} lastName={lastName} size={84} />
           }
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: fs + 2, fontWeight: 800, color: '#fff' }}>{firstName} {lastName}</div>
-            <div style={{ fontSize: fs - 2, color: gold, marginTop: 3 }}>{position}</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: '#fff', lineHeight: 1.2 }}>{firstName}</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: '#fff', lineHeight: 1.2 }}>{lastName}</div>
+            {position && <div style={{ fontSize: 10, color: gold, marginTop: 5 }}>{position}</div>}
           </div>
         </div>
 
-        <hr style={{ border: 'none', borderTop: '1px solid #555', margin: 0 }} />
+        <hr style={{ border: 'none', borderTop: '1px solid #444', margin: 0 }} />
 
         <div>
-          <div style={{ fontSize: fs - 2, fontWeight: 700, color: gold, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>{sections?.contact ?? DEFAULT_SECTIONS.contact}</div>
-          {email && <div style={{ fontSize: fs - 3, color: '#bbb', marginBottom: 4 }}>✉ {email}</div>}
-          {phone && <div style={{ fontSize: fs - 3, color: '#bbb', marginBottom: 4 }}>☎ {phone}</div>}
-          {city && <div style={{ fontSize: fs - 3, color: '#bbb', marginBottom: 4 }}>📍 {city}</div>}
-          {linkedin && <div style={{ fontSize: fs - 3, color: '#bbb', wordBreak: 'break-all' }}>in {linkedin}</div>}
-          {!email && !phone && !city && !linkedin && <div style={{ fontSize: fs - 2, color: '#666', fontStyle: 'italic' }}>—</div>}
+          <SidebarHead label={sections?.contact ?? DEFAULT_SECTIONS.contact} gold={gold} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {email    && <div style={{ fontSize: 10, color: '#bbb' }}>✉ {email}</div>}
+            {phone    && <div style={{ fontSize: 10, color: '#bbb' }}>☎ {phone}</div>}
+            {city     && <div style={{ fontSize: 10, color: '#bbb' }}>📍 {city}</div>}
+            {linkedin && <div style={{ fontSize: 10, color: '#bbb', wordBreak: 'break-all' }}>in {linkedin}</div>}
+            {!email && !phone && !city && !linkedin && <div style={{ fontSize: 10, color: '#555', fontStyle: 'italic' }}>—</div>}
+          </div>
         </div>
 
-        <hr style={{ border: 'none', borderTop: '1px solid #555', margin: 0 }} />
+        <hr style={{ border: 'none', borderTop: '1px solid #444', margin: 0 }} />
 
         <div>
-          <div style={{ fontSize: fs - 2, fontWeight: 700, color: gold, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>{sections?.skills ?? DEFAULT_SECTIONS.skills}</div>
+          <SidebarHead label={sections?.skills ?? DEFAULT_SECTIONS.skills} gold={gold} />
           {skills.length > 0
-            ? skills.map((s, i) => <StarRating key={i} label={s} stars={Math.max(3, 5 - (i % 3))} />)
-            : <div style={{ fontSize: fs - 2, color: '#666', fontStyle: 'italic' }}>—</div>}
+            ? skills.slice(0, 10).map((s, i) => (
+                <div key={i} style={{ fontSize: 10, color: '#ccc', marginBottom: 4, paddingLeft: 8 }}>• {s}</div>
+              ))
+            : <div style={{ fontSize: 10, color: '#555', fontStyle: 'italic' }}>—</div>}
         </div>
 
-        <hr style={{ border: 'none', borderTop: '1px solid #555', margin: 0 }} />
+        <hr style={{ border: 'none', borderTop: '1px solid #444', margin: 0 }} />
 
         <div>
-          <div style={{ fontSize: fs - 2, fontWeight: 700, color: gold, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>{sections?.languages ?? DEFAULT_SECTIONS.languages}</div>
+          <SidebarHead label={sections?.languages ?? DEFAULT_SECTIONS.languages} gold={gold} />
           {langList.length > 0
             ? langList.map((l, i) => <LangBar key={i} label={l} pct={Math.max(50, 100 - i * 20)} />)
             : languages
-              ? <div style={{ fontSize: fs - 3, color: '#ccc' }}>{languages}</div>
-              : <div style={{ fontSize: fs - 2, color: '#666', fontStyle: 'italic' }}>—</div>}
+              ? <div style={{ fontSize: 10, color: '#ccc' }}>{languages}</div>
+              : <div style={{ fontSize: 10, color: '#555', fontStyle: 'italic' }}>—</div>}
         </div>
       </div>
 
       {/* Main */}
-      <div style={{ flex: 1, padding: '32px 28px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div>
-          <div style={{ fontSize: fs + 6, fontWeight: 800, color: '#2D2D2D', lineHeight: 1.1 }}>{firstName} {lastName}</div>
-          <div style={{ fontSize: fs, color: gold, marginTop: 2 }}>{position}</div>
-        </div>
-        <hr style={{ border: 'none', borderTop: `2px solid ${gold}`, margin: 0 }} />
-
-        <div>
-          <div style={{ fontSize: fs, fontWeight: 700, color: '#3D3D3D', borderBottom: `2px solid ${gold}`, paddingBottom: 4, marginBottom: 8 }}>◈ {sections?.profile ?? DEFAULT_SECTIONS.profile}</div>
-          {profile
-            ? <div style={{ fontSize: fs - 1, color: '#444', lineHeight: ls }}>{profile}</div>
-            : <div style={{ fontSize: fs - 2, color: '#bbb', fontStyle: 'italic' }}>—</div>}
+      <div style={{ flex: 1, padding: '32px 26px', display: 'flex', flexDirection: 'column', gap: 18, backgroundColor: '#1E1E1E' }}>
+        {/* Name in main area */}
+        <div style={{ borderBottom: `1px solid ${gold}`, paddingBottom: 12, marginBottom: 4 }}>
+          <div style={{ fontSize: 26, fontWeight: 800, color: '#fff', lineHeight: 1.1 }}>{firstName} {lastName}</div>
+          {position && <div style={{ fontSize: 12, color: gold, marginTop: 4 }}>{position}</div>}
         </div>
 
+        {profile && (
+          <div>
+            <MainHead label={sections?.profile ?? DEFAULT_SECTIONS.profile} gold={gold} />
+            <div style={{ fontSize: fs - 1, color: '#ddd', lineHeight: ls }}>{profile}</div>
+          </div>
+        )}
+
         <div>
-          <div style={{ fontSize: fs, fontWeight: 700, color: '#3D3D3D', borderBottom: `2px solid ${gold}`, paddingBottom: 4, marginBottom: 8 }}>◈ {sections?.experience ?? DEFAULT_SECTIONS.experience}</div>
+          <MainHead label={sections?.experience ?? DEFAULT_SECTIONS.experience} gold={gold} />
           {expEntries.length > 0
             ? expEntries.map((e, i) => (
-                <div key={i} style={{ marginBottom: 14 }}>
-                  <div style={{ fontWeight: 700, fontSize: fs, color: '#2D2D2D' }}>{e.title}</div>
-                  {e.company && <div style={{ fontStyle: 'italic', fontSize: fs - 1, color: gold }}>{e.company}</div>}
-                  {e.period && <div style={{ fontSize: fs - 2, color: gold, fontWeight: 600 }}>{e.period}</div>}
-                  {e.description && <div style={{ fontSize: fs - 1, color: '#444', lineHeight: ls, marginTop: 2, whiteSpace: 'pre-wrap' }}>{e.description}</div>}
+                <div key={i} style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>{e.title}</div>
+                      {e.company && <div style={{ fontSize: 11, fontStyle: 'italic', color: gold, marginTop: 1 }}>{e.company}</div>}
+                    </div>
+                    {e.period && <div style={{ fontSize: 10, color: gold, whiteSpace: 'nowrap', marginLeft: 8, marginTop: 2 }}>{e.period}</div>}
+                  </div>
+                  {e.description && <DescBullets text={e.description} fs={fs} ls={ls} />}
                 </div>
               ))
-            : <div style={{ fontSize: fs - 2, color: '#bbb', fontStyle: 'italic' }}>—</div>}
+            : <div style={{ fontSize: 10, color: '#555', fontStyle: 'italic' }}>—</div>}
         </div>
 
         <div>
-          <div style={{ fontSize: fs, fontWeight: 700, color: '#3D3D3D', borderBottom: `2px solid ${gold}`, paddingBottom: 4, marginBottom: 8 }}>◈ {sections?.education ?? DEFAULT_SECTIONS.education}</div>
+          <MainHead label={sections?.education ?? DEFAULT_SECTIONS.education} gold={gold} />
           {eduEntries.length > 0
             ? eduEntries.map((e, i) => (
-                <div key={i} style={{ marginBottom: 14 }}>
-                  <div style={{ fontWeight: 700, fontSize: fs, color: '#2D2D2D' }}>{e.degree}</div>
-                  {e.institution && <div style={{ fontStyle: 'italic', fontSize: fs - 1, color: gold }}>{e.institution}</div>}
-                  {e.period && <div style={{ fontSize: fs - 2, color: gold, fontWeight: 600 }}>{e.period}</div>}
+                <div key={i} style={{ marginBottom: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>{e.degree}</div>
+                      {e.institution && <div style={{ fontSize: 11, fontStyle: 'italic', color: gold, marginTop: 1 }}>{e.institution}</div>}
+                    </div>
+                    {e.period && <div style={{ fontSize: 10, color: gold, whiteSpace: 'nowrap', marginLeft: 8, marginTop: 2 }}>{e.period}</div>}
+                  </div>
                 </div>
               ))
-            : <div style={{ fontSize: fs - 2, color: '#bbb', fontStyle: 'italic' }}>—</div>}
+            : <div style={{ fontSize: 10, color: '#555', fontStyle: 'italic' }}>—</div>}
         </div>
       </div>
     </div>
