@@ -1,5 +1,5 @@
 'use client'
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import dynamic from 'next/dynamic'
 import type { CVDesign, FontFamily, FontSize, LineSpacing, CVProps, CVSections } from '@/components/cv/types'
 import { DEFAULT_SECTIONS } from '@/components/cv/types'
@@ -139,6 +139,8 @@ const btnDanger: React.CSSProperties = {
 }
 
 const MAX_FREE_EDITS = 5
+const MAX_PRO_CVS = 5
+const MAX_FREE_CVS = 1
 
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function LebenslaufClient({ isPro, existingCVCount, profile, userId }: Props) {
@@ -182,7 +184,11 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
   const [loading, setLoading]       = useState(true)
   const [exporting, setExporting]   = useState(false)
   const [toast, setToast]           = useState<{ msg: string; ok: boolean } | null>(null)
+  const [isDirty, setIsDirty]       = useState(false)
   const skillInputRef = useRef<HTMLInputElement>(null)
+  const autoSaveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // Stable ref so handleAutoSave doesn't re-create on every render
+  const autoSaveDataRef = useRef({ isDirty: false, editingId: null as string | null, cvName: 'Mein Lebenslauf', design: 'NordicMinimal' as CVDesign, expEntries: [] as ExpEntry[], eduEntries: [] as EduEntry[], langEntries: [] as LangEntry[], skillTags: [] as string[], profileText: '', fields: initFromProfile(profile), fontFamily: 'Inter' as FontFamily, fontSize: 'medium' as FontSize, lineSpacing: 'normal' as LineSpacing })
 
   useEffect(() => {
     fetch('/api/cv/list')
@@ -215,6 +221,51 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
     setTimeout(() => setToast(null), 3500)
   }
 
+  // ── Dirty tracking: any form edit sets isDirty ──
+  const markDirty = useCallback(() => { if (view === 'build') setIsDirty(true) }, [view])
+
+  // Keep stable ref in sync so auto-save always reads latest values without resetting interval
+  useEffect(() => {
+    autoSaveDataRef.current = { isDirty, editingId, cvName, design, expEntries, eduEntries, langEntries, skillTags, profileText, fields, fontFamily, fontSize, lineSpacing }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDirty, editingId, cvName, design, expEntries, eduEntries, langEntries, skillTags, profileText, fields, fontFamily, fontSize, lineSpacing])
+
+  // Warn before leaving page with unsaved changes
+  useEffect(() => {
+    if (!isDirty) return
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [isDirty])
+
+  // Auto-save every 60 seconds silently — stable callback reads from ref
+  const handleAutoSave = useCallback(async () => {
+    const d = autoSaveDataRef.current
+    if (!d.isDirty || !d.editingId) return
+    const currentPropsSnapshot: CVProps = {
+      ...d.fields, profile: d.profileText,
+      experience: serializeExp(d.expEntries), education: serializeEdu(d.eduEntries),
+      languages: serializeLangs(d.langEntries), skills: d.skillTags,
+      fontFamily: d.fontFamily, fontSize: d.fontSize, lineSpacing: d.lineSpacing,
+    }
+    try {
+      const res = await fetch('/api/cv/save', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: d.editingId, title: d.cvName, design: d.design,
+          content: { data: currentPropsSnapshot, expEntries: d.expEntries, eduEntries: d.eduEntries, langEntries: d.langEntries, skillTags: d.skillTags },
+        }),
+      })
+      if (res.ok) setIsDirty(false)
+    } catch { /* silent */ }
+  }, []) // stable — reads live data from ref
+
+  useEffect(() => {
+    if (view !== 'build') return
+    autoSaveTimerRef.current = setInterval(() => { handleAutoSave() }, 60000)
+    return () => { if (autoSaveTimerRef.current) clearInterval(autoSaveTimerRef.current) }
+  }, [view, handleAutoSave])
+
   // ── Computed current CVProps ──
   const currentProps: CVProps = {
     ...fields,
@@ -228,11 +279,29 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
 
   // ── List actions ──
   function startNew() {
+    if (isPro && savedCVs.length >= MAX_PRO_CVS) {
+      showToast(`Du hast das Maximum von ${MAX_PRO_CVS} Lebensläufen erreicht. Lösche einen um einen neuen zu erstellen.`, false)
+      return
+    }
+    if (!isPro && savedCVs.length >= MAX_FREE_CVS) {
+      showToast(t.toastFreeLimit, false); return
+    }
     setFields(initFromProfile(profile))
     setExpEntries([emptyExp()]); setEduEntries([emptyEdu()])
     setLangEntries([emptyLang()]); setSkillTags([]); setSkillInput('')
     setProfileText(''); setDesign('NordicMinimal'); setCvName('Mein Lebenslauf')
-    setEditingId(null); setErrors({}); setStep(1); setView('build')
+    setEditingId(null); setErrors({}); setIsDirty(false); setStep(1); setView('build')
+  }
+
+  function handleBackToList() {
+    if (isDirty) {
+      if (window.confirm('Ungespeicherte Änderungen. Speichern?')) {
+        handleSave().then(() => { setIsDirty(false); setView('list') })
+        return
+      }
+    }
+    setIsDirty(false)
+    setView('list')
   }
 
   function openEdit(cv: SavedCV) {
@@ -303,34 +372,34 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
   // ── Skills tag input ──
   function addSkill(raw: string) {
     const s = raw.trim()
-    if (s && !skillTags.includes(s)) setSkillTags(prev => [...prev, s])
+    if (s && !skillTags.includes(s)) { setSkillTags(prev => [...prev, s]); markDirty() }
     setSkillInput('')
   }
 
-  function removeSkill(s: string) { setSkillTags(prev => prev.filter(x => x !== s)) }
+  function removeSkill(s: string) { setSkillTags(prev => prev.filter(x => x !== s)); markDirty() }
 
   // ── Experience / Education helpers ──
   function updExp(i: number, k: keyof ExpEntry, v: string) {
-    setExpEntries(prev => prev.map((e, j) => j === i ? { ...e, [k]: v } : e))
+    setExpEntries(prev => prev.map((e, j) => j === i ? { ...e, [k]: v } : e)); markDirty()
   }
-  function addExp() { setExpEntries(prev => [...prev, emptyExp()]) }
-  function removeExp(i: number) { if (expEntries.length > 1) setExpEntries(prev => prev.filter((_, j) => j !== i)) }
+  function addExp() { setExpEntries(prev => [...prev, emptyExp()]); markDirty() }
+  function removeExp(i: number) { if (expEntries.length > 1) { setExpEntries(prev => prev.filter((_, j) => j !== i)); markDirty() } }
 
   function updEdu(i: number, k: keyof EduEntry, v: string) {
-    setEduEntries(prev => prev.map((e, j) => j === i ? { ...e, [k]: v } : e))
+    setEduEntries(prev => prev.map((e, j) => j === i ? { ...e, [k]: v } : e)); markDirty()
   }
-  function addEdu() { setEduEntries(prev => [...prev, emptyEdu()]) }
-  function removeEdu(i: number) { if (eduEntries.length > 1) setEduEntries(prev => prev.filter((_, j) => j !== i)) }
+  function addEdu() { setEduEntries(prev => [...prev, emptyEdu()]); markDirty() }
+  function removeEdu(i: number) { if (eduEntries.length > 1) { setEduEntries(prev => prev.filter((_, j) => j !== i)); markDirty() } }
 
   function updLang(i: number, k: keyof LangEntry, v: string) {
-    setLangEntries(prev => prev.map((e, j) => j === i ? { ...e, [k]: v } : e))
+    setLangEntries(prev => prev.map((e, j) => j === i ? { ...e, [k]: v } : e)); markDirty()
   }
-  function addLang() { setLangEntries(prev => [...prev, emptyLang()]) }
+  function addLang() { setLangEntries(prev => [...prev, emptyLang()]); markDirty() }
   function isDupLang(name: string, idx: number) {
     const n = name.trim().toLowerCase()
     return n !== '' && langEntries.some((e, i) => i !== idx && e.language.trim().toLowerCase() === n)
   }
-  function removeLang(i: number) { if (langEntries.length > 1) setLangEntries(prev => prev.filter((_, j) => j !== i)) }
+  function removeLang(i: number) { if (langEntries.length > 1) { setLangEntries(prev => prev.filter((_, j) => j !== i)); markDirty() } }
 
   // ── Validation ──
   function validate(): boolean {
@@ -423,8 +492,9 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
         setSavedCVs(prev => [savedCv, ...prev])
         setEditingId(savedCv.id)
       }
-      showToast(t.toastSaved)
-    } catch { showToast('Speichern fehlgeschlagen', false) }
+      setIsDirty(false)
+      showToast('Lebenslauf gespeichert ✅')
+    } catch { showToast('Fehler beim Speichern. Bitte versuche es erneut.', false) }
     finally { setSaving(false) }
   }
 
@@ -510,11 +580,19 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
                   {s}
                 </button>
               ))}
-              <button onClick={() => setView('list')} style={btnSecondary}>{t.overview}</button>
+              <button onClick={handleSave} disabled={saving}
+                style={{ ...btnPrimary('#10b981'), padding: '8px 16px', fontSize: 13, opacity: saving ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: 5 }}>
+                {saving ? 'Wird gespeichert…' : isDirty ? '💾 Speichern *' : '💾 Speichern'}
+              </button>
+              <button onClick={handleBackToList} style={btnSecondary}>{t.overview}</button>
             </>
           )}
           {view === 'list' && (
-            <button onClick={startNew} style={btnPrimary()}>{t.newCV}</button>
+            <button onClick={startNew}
+              disabled={isPro ? savedCVs.length >= MAX_PRO_CVS : savedCVs.length >= MAX_FREE_CVS}
+              style={{ ...btnPrimary(), opacity: (isPro ? savedCVs.length >= MAX_PRO_CVS : savedCVs.length >= MAX_FREE_CVS) ? 0.5 : 1 }}>
+              {t.newCV}
+            </button>
           )}
         </div>
       </div>
@@ -533,7 +611,16 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
               <button onClick={startNew} style={{ ...btnPrimary(), padding: '14px 28px', fontSize: 15 }}>{t.cvCreateFirst}</button>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+            <>
+              {/* Counter */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <div style={{ fontSize: 13, color: C.mid }}>
+                  {isPro
+                    ? <>{savedCVs.length}/{MAX_PRO_CVS} Lebensläufe</>
+                    : <>{savedCVs.length}/{MAX_FREE_CVS} Lebenslauf (Free-Plan)</>}
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
               {savedCVs.map(cv => {
                 const editLimitReached = !isPro && cv.editCount >= MAX_FREE_EDITS
                 const editWarning      = !isPro && cv.editCount === MAX_FREE_EDITS - 1
@@ -552,11 +639,13 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
                     <div style={{ fontSize: 12, color: C.mid, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                       <span>{DESIGNS.find(d => d.id === cv.design)?.label}</span>
                       <span>·</span>
-                      <span>{new Date(cv.createdAt).toLocaleDateString()}</span>
-                      {!isPro && (
+                      <span>Bearb. {new Date(cv.createdAt).toLocaleDateString()}</span>
+                      {!isPro ? (
                         <span style={{ color: editLimitReached ? C.error : editWarning ? C.amber : C.mid }}>
                           · {cv.editCount}/{MAX_FREE_EDITS} Bearb.
                         </span>
+                      ) : (
+                        <span>· {cv.editCount} Bearb.</span>
                       )}
                     </div>
                     {editLimitReached && (
@@ -568,12 +657,22 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
                       <button onClick={() => openEdit(cv)} disabled={editLimitReached} style={{ ...btnPrimary(), padding: '7px 14px', fontSize: 12, opacity: editLimitReached ? 0.5 : 1, cursor: editLimitReached ? 'not-allowed' : 'pointer' }}>{t.edit}</button>
                       <button onClick={() => { setRenamingId(cv.id); setRenameVal(cv.name) }} style={{ ...btnSecondary, padding: '7px 12px', fontSize: 12 }}>{t.rename}</button>
                       <button onClick={() => duplicateCv(cv)} style={{ ...btnSecondary, padding: '7px 12px', fontSize: 12 }}>{t.duplicate}</button>
+                      <button onClick={() => { openEdit(cv); setTimeout(() => handleExportPDF(), 500) }} style={{ ...btnSecondary, padding: '7px 12px', fontSize: 12 }}>PDF</button>
                       <button onClick={() => deleteCv(cv.id)} style={{ ...btnDanger, padding: '7px 12px' }}>{t.delete_}</button>
                     </div>
                   </div>
                 )
               })}
-            </div>
+              {/* Locked "Pro" slot for free users */}
+              {!isPro && savedCVs.length >= MAX_FREE_CVS && (
+                <div style={{ backgroundColor: 'rgba(255,255,255,0.02)', border: `1px dashed rgba(255,255,255,0.12)`, borderRadius: 14, padding: 20, display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center', justifyContent: 'center', textAlign: 'center', minHeight: 160 }}>
+                  <div style={{ fontSize: 28 }}>🔒</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: C.mid }}>Weiteren Lebenslauf erstellen (Pro)</div>
+                  <a href="/dashboard" style={{ ...btnPrimary(C.amber), padding: '7px 16px', fontSize: 12, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4, color: '#000' }}>⭐ Upgrade zu Pro</a>
+                </div>
+              )}
+              </div>
+            </>
           )
         )}
 
@@ -590,7 +689,7 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
                     const locked = d.proOnly && !isPro
                     const sel    = design === d.id
                     return (
-                      <div key={d.id} onClick={() => { if (locked) { showToast(t.toastProOnly, false); return } setDesign(d.id) }}
+                      <div key={d.id} onClick={() => { if (locked) { showToast(t.toastProOnly, false); return } setDesign(d.id); markDirty() }}
                         style={{ position: 'relative', backgroundColor: sel ? 'rgba(27,46,107,0.25)' : '#0d0d1a', border: `2px solid ${sel ? '#1B2E6B' : 'rgba(255,255,255,0.08)'}`, borderRadius: 12, padding: 20, cursor: locked ? 'default' : 'pointer', boxShadow: sel ? '0 0 0 2px rgba(27,46,107,0.4)' : 'none', transition: 'all .15s' }}>
                         {locked && (
                           <div style={{ position: 'absolute', inset: 0, borderRadius: 11, backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, zIndex: 1 }}>
@@ -632,7 +731,7 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
                       <div key={k}>
                         <label style={labelStyle}>{label}</label>
                         <input value={(fields[k] as string) || ''}
-                          onChange={e => { setFields(p => ({ ...p, [k]: e.target.value })); if (errors[k]) setErrors(p => ({ ...p, [k]: '' })) }}
+                          onChange={e => { setFields(p => ({ ...p, [k]: e.target.value })); if (errors[k]) setErrors(p => ({ ...p, [k]: '' })); markDirty() }}
                           style={{ ...inStyle, borderColor: errors[k] ? C.error : 'rgba(255,255,255,0.1)' }} />
                         {errors[k] && <div style={{ fontSize: 11, color: C.error, marginTop: 4 }}>{errors[k]}</div>}
                       </div>
@@ -643,7 +742,7 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
                 {/* ── Profile / Summary ── */}
                 <Section title={t.profileSummary}>
                   <label style={labelStyle}>{t.profileSummary}</label>
-                  <textarea value={profileText} onChange={e => setProfileText(e.target.value)}
+                  <textarea value={profileText} onChange={e => { setProfileText(e.target.value); markDirty() }}
                     rows={3} placeholder={t.profilePlaceholder} style={taStyle} />
                   <div style={{ fontSize: 11, color: C.mid, textAlign: 'right', marginTop: 4 }}>{profileText.length} {t.charCount}</div>
                 </Section>
@@ -762,7 +861,7 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
 
                 {/* ── CV name ── */}
                 <Section title={t.cvName}>
-                  <input value={cvName} onChange={e => setCvName(e.target.value)} style={inStyle} placeholder="z.B. Bewerbung 2025" />
+                  <input value={cvName} onChange={e => { setCvName(e.target.value); markDirty() }} style={inStyle} placeholder="z.B. Bewerbung 2025" />
                 </Section>
 
                 {/* ── Action row ── */}
@@ -812,6 +911,7 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
                           if (key === 'fontFamily') setFontFamily(e.target.value as FontFamily)
                           else if (key === 'fontSize') setFontSize(e.target.value as FontSize)
                           else setLineSpacing(e.target.value as LineSpacing)
+                          markDirty()
                         }}
                         style={{ ...selStyle, width: 'auto', minWidth: 120 }}>
                         {opts.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
