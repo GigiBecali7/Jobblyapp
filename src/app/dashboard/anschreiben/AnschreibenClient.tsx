@@ -1,5 +1,5 @@
 'use client'
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { CVDesign } from '@/components/cv/types'
 import { getDashT, getCurrentLang } from '@/lib/dashboard-i18n'
@@ -7,6 +7,8 @@ import { useIsMobile } from '@/lib/useIsMobile'
 import { trackEvent } from '@/components/MetaPixel'
 
 const MAX_FREE_EDITS = 5
+const MAX_PRO_LETTERS = 5
+const MAX_FREE_LETTERS = 1
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface CoverLetter {
@@ -46,8 +48,6 @@ const DESIGNS: { id: CVDesign; label: string; desc: string; proOnly: boolean; em
   { id: 'MonoElegant',    label: 'Mono Elegant',     desc: 'Minimalistisch',        proOnly: true,  emoji: '⬛' },
 ]
 
-const MAX_FREE = 1
-
 // ── Colors ────────────────────────────────────────────────────────────────────
 const C = {
   bg: '#0A0A0F', card: '#0D1117', border: 'rgba(255,255,255,0.07)',
@@ -71,6 +71,11 @@ const btnSecondary: React.CSSProperties = {
 const labelStyle: React.CSSProperties = {
   display: 'block', fontSize: 12, fontWeight: 600, color: C.mid,
   marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.8,
+}
+const btnDanger: React.CSSProperties = {
+  backgroundColor: 'transparent', color: '#f87171',
+  border: `1px solid rgba(248,113,113,0.3)`, borderRadius: 7,
+  padding: '5px 10px', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit',
 }
 
 // ── Cover Letter A4 Preview ───────────────────────────────────────────────────
@@ -129,7 +134,7 @@ function CoverLetterA4({
 
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function AnschreibenClient({ isPro, letters: initialLetters, lastDesign, userId, profile }: Props) {
-  const supabase = createClient()
+  const supabaseRef = useRef(createClient())
   const lang     = getCurrentLang()
   const t        = getDashT(lang)
   const mob      = useIsMobile()
@@ -150,8 +155,48 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
   const [showApplyModal, setShowApplyModal] = useState(false)
   const [toast, setToast]           = useState<{ msg: string; ok: boolean } | null>(null)
   const [errors, setErrors]         = useState<{ job?: string; company?: string }>({})
+  const [isDirty, setIsDirty]       = useState(false)
+
+  const autoSaveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const autoSaveDataRef  = useRef({ isDirty: false, editingId: null as string | null, editableText: '', selectedDesign: 'NordicMinimal' as CVDesign })
 
   function showToast(msg: string, ok = true) { setToast({ msg, ok }); setTimeout(() => setToast(null), 3500) }
+
+  // ── Dirty tracking ──
+  const markDirty = useCallback(() => { if (view === 'preview') setIsDirty(true) }, [view])
+
+  // Keep stable ref in sync
+  useEffect(() => {
+    autoSaveDataRef.current = { isDirty, editingId, editableText, selectedDesign }
+  }, [isDirty, editingId, editableText, selectedDesign])
+
+  // Warn on page leave when dirty
+  useEffect(() => {
+    if (!isDirty) return
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [isDirty])
+
+  // Auto-save every 60 seconds silently — stable callback reads from ref
+  const handleAutoSave = useCallback(async () => {
+    const d = autoSaveDataRef.current
+    if (!d.isDirty || !d.editingId) return
+    try {
+      const supabase = supabaseRef.current
+      const { error } = await supabase.from('cover_letters').update({
+        content: d.editableText, design: d.selectedDesign,
+        updated_at: new Date().toISOString(),
+      }).eq('id', d.editingId)
+      if (!error) setIsDirty(false)
+    } catch { /* silent */ }
+  }, [])
+
+  useEffect(() => {
+    if (view !== 'preview') return
+    autoSaveTimerRef.current = setInterval(() => { handleAutoSave() }, 60000)
+    return () => { if (autoSaveTimerRef.current) clearInterval(autoSaveTimerRef.current) }
+  }, [view, handleAutoSave])
 
   function validate(): boolean {
     const errs: { job?: string; company?: string } = {}
@@ -164,11 +209,31 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
   function resetForm() {
     setJobTitle(''); setCompany(''); setEditableText('')
     setEditingId(null); setErrors({}); setSelectedDesign('NordicMinimal')
+    setIsDirty(false)
+  }
+
+  function handleBackToList() {
+    if (isDirty) {
+      if (window.confirm('Ungespeicherte Änderungen. Speichern?')) {
+        handleSave().then(() => { setIsDirty(false); setView('list'); resetForm() })
+        return
+      }
+    }
+    setIsDirty(false)
+    setView('list')
+    resetForm()
   }
 
   async function handleGenerate() {
     if (!validate()) return
-    if (!isPro && letters.length >= MAX_FREE) { showToast(`Free-Plan: max. ${MAX_FREE} Anschreiben. Upgrade zu Pro!`, false); return }
+    const maxLetters = isPro ? MAX_PRO_LETTERS : MAX_FREE_LETTERS
+    if (letters.length >= maxLetters) {
+      const msg = isPro
+        ? `Du hast das Maximum von ${MAX_PRO_LETTERS} Anschreiben erreicht. Lösche eines um ein neues zu erstellen.`
+        : `Free-Plan: max. ${MAX_FREE_LETTERS} Anschreiben. Upgrade zu Pro!`
+      showToast(msg, false)
+      return
+    }
     setGenerating(true)
     try {
       const userProfile = `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim()
@@ -186,6 +251,7 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
   async function handleSave() {
     setSaving(true)
     try {
+      const supabase = supabaseRef.current
       if (editingId) {
         const existing = letters.find(l => l.id === editingId)
         if (!isPro && existing && existing.edit_count >= MAX_FREE_EDITS) {
@@ -201,7 +267,7 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
         if (!isPro && newCount === MAX_FREE_EDITS) {
           showToast(`Letzte Bearbeitung! Free-Plan erlaubt max. ${MAX_FREE_EDITS}. Upgrade für mehr.`, true)
         } else {
-          showToast(t.toastSaved)
+          showToast('Anschreiben gespeichert ✅')
         }
       } else {
         const { data, error } = await supabase.from('cover_letters').insert({
@@ -209,10 +275,18 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
         }).select().single()
         if (error) throw error
         if (data) { setLetters(prev => [data as CoverLetter, ...prev]); setEditingId((data as CoverLetter).id) }
-        showToast(t.toastSaved)
+        showToast('Anschreiben gespeichert ✅')
       }
-    } catch { showToast(t.toastGenerateError, false) }
+      setIsDirty(false)
+    } catch { showToast('Fehler beim Speichern. Bitte versuche es erneut.', false) }
     finally { setSaving(false) }
+  }
+
+  async function handleDelete(id: string) {
+    const supabase = supabaseRef.current
+    const { error } = await supabase.from('cover_letters').delete().eq('id', id)
+    if (!error) { setLetters(prev => prev.filter(l => l.id !== id)); showToast('Anschreiben gelöscht') }
+    else { showToast('Fehler beim Löschen', false) }
   }
 
   async function handleExportPDF() {
@@ -254,6 +328,7 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
   async function handleApply() {
     setApplying(true)
     try {
+      const supabase = supabaseRef.current
       await supabase.from('applications').insert({
         user_id: userId, position: jobTitle, company,
         template: selectedDesign, style: 'balanced',
@@ -273,8 +348,11 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
     setJobTitle(l.job_title); setCompany(l.company)
     setEditableText(l.content)
     setSelectedDesign((l.design as CVDesign) || 'NordicMinimal')
-    setEditingId(l.id); setView('preview')
+    setEditingId(l.id); setIsDirty(false); setView('preview')
   }
+
+  const maxLetters = isPro ? MAX_PRO_LETTERS : MAX_FREE_LETTERS
+  const atLimit = letters.length >= maxLetters
 
   const a4Props = { profile, jobTitle, company, text: editableText, design: selectedDesign, greeting: t.letterGreeting, closing: t.letterClosing, subjectPrefix: t.letterSubjectPrefix }
 
@@ -298,9 +376,26 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
           <a href="/dashboard" style={{ color: C.navy3, textDecoration: 'none', fontSize: 13 }}>{t.dashboard}</a>
           <h1 style={{ margin: '4px 0 0', fontSize: 22, fontWeight: 700 }}>{t.letterTitle}</h1>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          {view !== 'list' && <button onClick={() => { setView('list'); resetForm() }} style={btnSecondary}>{t.overview}</button>}
-          {view === 'list' && <button onClick={() => { resetForm(); setView('input') }} style={btnPrimary()}>{t.newLetter}</button>}
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          {view === 'preview' && (
+            <>
+              <button onClick={handleSave} disabled={saving}
+                style={{ ...btnPrimary('#10b981'), padding: '8px 16px', fontSize: 13, opacity: saving ? 0.7 : 1 }}>
+                {saving ? 'Wird gespeichert…' : isDirty ? '💾 Speichern *' : '💾 Speichern'}
+              </button>
+              <button onClick={handleBackToList} style={btnSecondary}>{t.overview}</button>
+            </>
+          )}
+          {view === 'input' && (
+            <button onClick={() => { setView('list'); resetForm() }} style={btnSecondary}>{t.overview}</button>
+          )}
+          {view === 'list' && (
+            <button onClick={() => { resetForm(); setView('input') }}
+              disabled={atLimit}
+              style={{ ...btnPrimary(), opacity: atLimit ? 0.5 : 1, cursor: atLimit ? 'not-allowed' : 'pointer' }}>
+              {t.newLetter}
+            </button>
+          )}
         </div>
       </div>
 
@@ -309,10 +404,13 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
         {/* ══ LIST VIEW ══════════════════════════════════════════════════════ */}
         {view === 'list' && (
           <div>
-            {!isPro && (
-              <div style={{ backgroundColor: 'rgba(245,158,11,0.08)', border: `1px solid rgba(245,158,11,0.3)`, borderRadius: 10, padding: '12px 16px', marginBottom: 20, fontSize: 13, color: C.amber }}>
-                Free-Plan: {letters.length}/{MAX_FREE} Anschreiben.{' '}
-                <a href="/dashboard" style={{ color: C.navy3, fontWeight: 600 }}>Upgrade zu Pro →</a>
+            {letters.length > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <div style={{ fontSize: 13, color: C.mid }}>
+                  {isPro
+                    ? <>{letters.length}/{MAX_PRO_LETTERS} Anschreiben</>
+                    : <>{letters.length}/{MAX_FREE_LETTERS} Anschreiben (Free-Plan)</>}
+                </div>
               </div>
             )}
             {letters.length === 0 ? (
@@ -326,15 +424,51 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {letters.map(l => (
-                  <div key={l.id} style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: 15 }}>{l.job_title}</div>
-                      <div style={{ fontSize: 13, color: C.mid, marginTop: 3 }}>{l.company} · {new Date(l.created_at).toLocaleDateString('de-DE')}</div>
+                {letters.map(l => {
+                  const editLimitReached = !isPro && l.edit_count >= MAX_FREE_EDITS
+                  const editWarning      = !isPro && l.edit_count === MAX_FREE_EDITS - 1
+                  return (
+                    <div key={l.id} style={{ backgroundColor: C.card, border: `1px solid ${editLimitReached ? 'rgba(248,113,113,0.3)' : C.border}`, borderRadius: 12, padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 15 }}>{l.job_title}</div>
+                        <div style={{ fontSize: 13, color: C.mid, marginTop: 3, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                          <span>{l.company}</span>
+                          <span>·</span>
+                          <span>{new Date(l.created_at).toLocaleDateString('de-DE')}</span>
+                          {!isPro ? (
+                            <span style={{ color: editLimitReached ? C.error : editWarning ? C.amber : C.mid }}>
+                              · {l.edit_count}/{MAX_FREE_EDITS} Bearb.
+                            </span>
+                          ) : (
+                            <span>· {l.edit_count} Bearb.</span>
+                          )}
+                        </div>
+                        {editLimitReached && (
+                          <div style={{ fontSize: 11, color: C.error, marginTop: 4 }}>
+                            Bearbeitungslimit erreicht — <a href="/dashboard" style={{ color: C.navy3 }}>Upgrade zu Pro</a>
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button onClick={() => openLetter(l)} disabled={editLimitReached}
+                          style={{ ...btnSecondary, padding: '8px 16px', fontSize: 13, opacity: editLimitReached ? 0.5 : 1, cursor: editLimitReached ? 'not-allowed' : 'pointer' }}>
+                          Ansehen →
+                        </button>
+                        <button onClick={() => handleDelete(l.id)} style={{ ...btnDanger, padding: '8px 12px' }}>
+                          {t.delete_}
+                        </button>
+                      </div>
                     </div>
-                    <button onClick={() => openLetter(l)} style={{ ...btnSecondary, padding: '8px 16px', fontSize: 13 }}>Ansehen →</button>
+                  )
+                })}
+                {/* Locked "Pro" slot for free users */}
+                {!isPro && letters.length >= MAX_FREE_LETTERS && (
+                  <div style={{ backgroundColor: 'rgba(255,255,255,0.02)', border: `1px dashed rgba(255,255,255,0.12)`, borderRadius: 12, padding: 20, display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center', justifyContent: 'center', textAlign: 'center', minHeight: 100 }}>
+                    <div style={{ fontSize: 24 }}>🔒</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.mid }}>Weiteres Anschreiben erstellen (Pro)</div>
+                    <a href="/dashboard" style={{ ...btnPrimary(C.amber), padding: '7px 16px', fontSize: 12, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4, color: '#000' }}>⭐ Upgrade zu Pro</a>
                   </div>
-                ))}
+                )}
               </div>
             )}
           </div>
@@ -382,9 +516,6 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: mob ? 'flex-start' : 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10, flexDirection: mob ? 'column' : 'row' }}>
               <h2 style={{ fontSize: mob ? 16 : 18, fontWeight: 700, margin: 0 }}>{jobTitle} — {company}</h2>
               <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr 1fr' : 'auto auto auto auto', gap: 8 }}>
-                <button onClick={handleSave} disabled={saving} style={{ ...btnPrimary('#6366f1'), opacity: saving ? 0.7 : 1 }}>
-                  {saving ? t.saving : t.letterSave}
-                </button>
                 <button onClick={handleExportPDF} disabled={exporting} style={{ ...btnPrimary('#ef4444'), opacity: exporting ? 0.7 : 1 }}>
                   {exporting ? '...' : t.letterPDF}
                 </button>
@@ -399,7 +530,7 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
             <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr' : '1fr 260px', gap: 20, marginBottom: 24 }}>
               <div style={{ backgroundColor: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20 }}>
                 <div style={{ fontSize: 12, color: C.navy3, marginBottom: 10, fontWeight: 500 }}>✏️ {t.letterEditHint}</div>
-                <textarea value={editableText} onChange={e => setEditableText(e.target.value)}
+                <textarea value={editableText} onChange={e => { setEditableText(e.target.value); markDirty() }}
                   rows={16} style={{ ...inStyle, resize: 'vertical', lineHeight: 1.7, backgroundColor: 'rgba(255,255,255,0.02)', fontSize: 13 }} />
               </div>
               <div>
@@ -412,7 +543,7 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
                     const cfg    = DESIGN_CFG[d.id]
                     return (
                       <button key={d.id}
-                        onClick={() => { if (locked) { showToast(t.toastProOnly, false); return } setSelectedDesign(d.id) }}
+                        onClick={() => { if (locked) { showToast(t.toastProOnly, false); return } setSelectedDesign(d.id); markDirty() }}
                         style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, border: `1px solid ${sel ? cfg.accent : C.border}`, backgroundColor: sel ? `${cfg.headerBg}22` : 'transparent', cursor: locked ? 'default' : 'pointer', opacity: locked ? 0.5 : 1, fontFamily: 'inherit', color: C.white, width: '100%', textAlign: 'left' }}>
                         <div style={{ width: 28, height: 28, borderRadius: 6, backgroundColor: cfg.headerBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, flexShrink: 0 }}>{d.emoji}</div>
                         <div>
@@ -467,7 +598,7 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
                   const cfg    = DESIGN_CFG[d.id]
                   return (
                     <button key={d.id}
-                      onClick={() => { if (locked) { showToast(t.toastProOnly, false); return } setSelectedDesign(d.id) }}
+                      onClick={() => { if (locked) { showToast(t.toastProOnly, false); return } setSelectedDesign(d.id); markDirty() }}
                       style={{ position: 'relative', padding: '12px 10px', borderRadius: 10, border: `2px solid ${sel ? C.navy : 'rgba(255,255,255,0.1)'}`, backgroundColor: sel ? 'rgba(27,46,107,0.25)' : '#0d0d1a', cursor: locked ? 'default' : 'pointer', fontFamily: 'inherit', color: C.white, textAlign: 'center', opacity: locked ? 0.7 : 1 }}>
                       {locked && (
                         <div style={{ position: 'absolute', inset: 0, borderRadius: 9, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, fontSize: 11, color: C.amber, fontWeight: 700 }}>

@@ -9,7 +9,7 @@ export async function GET() {
 
     const { data, error } = await supabase
       .from('cvs')
-      .select('id, title, design, edit_count, created_at, updated_at')
+      .select('id, title, design, content, edit_count, created_at, updated_at')
       .eq('user_id', user.id)
       .order('updated_at', { ascending: false })
 

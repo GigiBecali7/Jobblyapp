@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
 const MAX_FREE_CVS = 1
+const MAX_PRO_CVS = 5
 const MAX_FREE_EDITS = 5
-const MAX_PRO_EDITS = 999
 
 export async function POST(req: NextRequest) {
   try {
@@ -23,18 +23,17 @@ export async function POST(req: NextRequest) {
     if (!content) return NextResponse.json({ error: 'Inhalt erforderlich' }, { status: 422 })
 
     if (id) {
-      // Update existing CV — check edit limit
+      // Update existing CV — check edit limit (free only)
       const { data: existing, error: fetchErr } = await supabase
         .from('cvs').select('id, edit_count, user_id').eq('id', id).eq('user_id', user.id).single()
       if (fetchErr || !existing) return NextResponse.json({ error: 'CV nicht gefunden' }, { status: 404 })
 
-      const maxEdits = isPro ? MAX_PRO_EDITS : MAX_FREE_EDITS
       if (!isPro && existing.edit_count >= MAX_FREE_EDITS) {
         return NextResponse.json({
           error: `Free-Plan: max. ${MAX_FREE_EDITS} Bearbeitungen pro CV. Upgrade zu Pro!`,
           limitReached: true,
           editCount: existing.edit_count,
-          maxEdits,
+          maxEdits: MAX_FREE_EDITS,
         }, { status: 403 })
       }
 
@@ -52,11 +51,12 @@ export async function POST(req: NextRequest) {
       const { count } = await supabase
         .from('cvs').select('id', { count: 'exact', head: true }).eq('user_id', user.id)
 
-      if (!isPro && (count ?? 0) >= MAX_FREE_CVS) {
-        return NextResponse.json({
-          error: `Free-Plan: max. ${MAX_FREE_CVS} Lebenslauf. Upgrade zu Pro!`,
-          limitReached: true,
-        }, { status: 403 })
+      const maxCvs = isPro ? MAX_PRO_CVS : MAX_FREE_CVS
+      if ((count ?? 0) >= maxCvs) {
+        const msg = isPro
+          ? `Du hast das Maximum von ${MAX_PRO_CVS} Lebensläufen erreicht. Lösche einen um einen neuen zu erstellen.`
+          : `Free-Plan: max. ${MAX_FREE_CVS} Lebenslauf. Upgrade zu Pro!`
+        return NextResponse.json({ error: msg, limitReached: true }, { status: 403 })
       }
 
       const { data: created, error: insertErr } = await supabase
