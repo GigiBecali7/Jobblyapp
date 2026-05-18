@@ -7,6 +7,7 @@ import { getDashT, getCurrentLang } from '@/lib/dashboard-i18n'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { trackEvent } from '@/components/MetaPixel'
 import { createClient } from '@/lib/supabase/client'
+import UpgradeModal from '@/components/UpgradeModal'
 
 const NordicMinimal  = dynamic(() => import('@/components/cv/NordicMinimal'),  { ssr: false })
 const NordicSidebar  = dynamic(() => import('@/components/cv/NordicSidebar'),  { ssr: false })
@@ -204,6 +205,7 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
   const [isDirty, setIsDirty]       = useState(false)
   const [validModal, setValidModal] = useState<string[] | null>(null)
   const [photoUploading, setPhotoUploading] = useState(false)
+  const [upgradeModal, setUpgradeModal] = useState<string | null>(null)
   const skillInputRef = useRef<HTMLInputElement>(null)
   const cvPhotoFileRef = useRef<HTMLInputElement>(null)
   const autoSaveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -588,6 +590,7 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
 
   // ── PDF Export ──
   async function handleExportPDF() {
+    if (!isPro && fields.photoUrl) { setUpgradeModal('CV Export mit Foto'); return }
     setExporting(true)
     try {
       const { default: html2canvas } = await import('html2canvas')
@@ -701,6 +704,8 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
           </div>
         </div>
       )}
+
+      {upgradeModal && <UpgradeModal feature={upgradeModal} onClose={() => setUpgradeModal(null)} />}
 
       {/* Header */}
       <div style={{ backgroundColor: C.card, borderBottom: `1px solid ${C.border}`, padding: mob ? '12px 16px' : '16px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
@@ -826,7 +831,7 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
                     const locked = d.proOnly && !isPro
                     const sel    = design === d.id
                     return (
-                      <div key={d.id} onClick={() => { if (locked) { showToast(t.toastProOnly, false); return } setDesign(d.id); markDirty() }}
+                      <div key={d.id} onClick={() => { if (locked) { setUpgradeModal(`CV-Design: ${d.label}`); return } setDesign(d.id); markDirty() }}
                         style={{ position: 'relative', backgroundColor: sel ? 'rgba(27,46,107,0.25)' : '#0d0d1a', border: `2px solid ${sel ? '#1B2E6B' : 'rgba(255,255,255,0.08)'}`, borderRadius: 12, padding: 20, cursor: locked ? 'default' : 'pointer', boxShadow: sel ? '0 0 0 2px rgba(27,46,107,0.4)' : 'none', transition: 'all .15s' }}>
                         {locked && (
                           <div style={{ position: 'absolute', inset: 0, borderRadius: 11, backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, zIndex: 1 }}>

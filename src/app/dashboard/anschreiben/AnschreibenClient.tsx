@@ -5,6 +5,7 @@ import type { CVDesign } from '@/components/cv/types'
 import { getDashT, getCurrentLang } from '@/lib/dashboard-i18n'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { trackEvent } from '@/components/MetaPixel'
+import UpgradeModal from '@/components/UpgradeModal'
 
 const MAX_FREE_EDITS = 5
 const MAX_PRO_LETTERS = 5
@@ -171,6 +172,7 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
   const [applying, setApplying]     = useState(false)
   const [showApplyModal, setShowApplyModal] = useState(false)
   const [toast, setToast]           = useState<{ msg: string; ok: boolean } | null>(null)
+  const [upgradeModal, setUpgradeModal] = useState<string | null>(null)
   const [errors, setErrors]         = useState<{ job?: string; company?: string }>({})
   const [isDirty, setIsDirty]       = useState(false)
   const autoSaveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -243,10 +245,8 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
     if (!validate()) return
     const maxLetters = isPro ? MAX_PRO_LETTERS : MAX_FREE_LETTERS
     if (letters.length >= maxLetters) {
-      const msg = isPro
-        ? `Du hast das Maximum von ${MAX_PRO_LETTERS} Anschreiben erreicht. Lösche eines um ein neues zu erstellen.`
-        : `Free-Plan: max. ${MAX_FREE_LETTERS} Anschreiben. Upgrade zu Pro!`
-      showToast(msg, false)
+      if (!isPro) { setUpgradeModal('Unbegrenzte KI-Anschreiben'); return }
+      showToast(`Du hast das Maximum von ${MAX_PRO_LETTERS} Anschreiben erreicht. Lösche eines um ein neues zu erstellen.`, false)
       return
     }
     setGenerating(true)
@@ -262,7 +262,7 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
       } else if (json.action === 'fill_form') {
         showToast(json.error || 'Bitte fülle Stelle und Unternehmen aus.', false)
       } else if (json.action === 'upgrade') {
-        showToast(json.error || 'Tageslimit erreicht. Upgrade zu Pro!', false)
+        setUpgradeModal('Unbegrenzte KI-Anschreiben')
       } else {
         const errMsg = json.error || t.toastGenerateError
         const isTempDown = res.status === 503
@@ -425,6 +425,8 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
       <div style={{ position: 'fixed', left: -9999, top: 0, zIndex: -1, pointerEvents: 'none' }}>
         <div id="cover-letter-a4-hidden"><CoverLetterA4 {...a4Props} /></div>
       </div>
+
+      {upgradeModal && <UpgradeModal feature={upgradeModal} onClose={() => setUpgradeModal(null)} />}
 
       {/* Toast */}
       {toast && (
