@@ -18,8 +18,28 @@ type CoverLetterRow = {
   created_at: string
 }
 
+function dbErr(label: string, error: unknown) {
+  const e = error as { message?: string; code?: string; details?: string; hint?: string } | null
+  console.error(`cover-letter/save ${label}:`, JSON.stringify(e, null, 2))
+  return NextResponse.json({
+    error: 'Speichern fehlgeschlagen.',
+    details: e?.message || String(error),
+    code: e?.code,
+    hint: e?.hint,
+  }, { status: 500 })
+}
+
 export async function POST(req: NextRequest) {
   try {
+    // Fail fast if service role key is missing (common Vercel env var issue)
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      console.error('cover-letter/save: SUPABASE_SERVICE_ROLE_KEY is not set')
+      return NextResponse.json({
+        error: 'Speichern fehlgeschlagen.',
+        details: 'SUPABASE_SERVICE_ROLE_KEY env var missing',
+      }, { status: 500 })
+    }
+
     // Auth via anon client (reads session cookie)
     const authClient = await createClient()
     const { data: { user }, error: authErr } = await authClient.auth.getUser()
@@ -29,7 +49,7 @@ export async function POST(req: NextRequest) {
     }
 
     // All DB operations via service role (bypasses RLS, auth already verified above)
-    // @ts-ignore — service client is untyped; cast as needed per field
+    // @ts-ignore
     const db = createServiceClient() as any
 
     const { data: profileRow } = await db
@@ -47,6 +67,7 @@ export async function POST(req: NextRequest) {
       company,
       contentLength: content?.length,
       isPro,
+      serviceKeyPresent: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
     })
 
     if (!content?.trim()) {
@@ -54,7 +75,6 @@ export async function POST(req: NextRequest) {
     }
 
     if (id) {
-      // Update existing
       const { data: existingRaw, error: fetchErr } = await db
         .from('cover_letters')
         .select('id, edit_count, user_id')
@@ -63,8 +83,11 @@ export async function POST(req: NextRequest) {
       const existing = existingRaw as Pick<CoverLetterRow, 'id' | 'edit_count' | 'user_id'> | null
 
       if (fetchErr || !existing) {
-        console.error('cover-letter/save fetch existing error:', JSON.stringify(fetchErr, null, 2))
-        return NextResponse.json({ error: 'Anschreiben nicht gefunden.' }, { status: 404 })
+        console.error('cover-letter/save fetch existing:', JSON.stringify(fetchErr, null, 2))
+        return NextResponse.json({
+          error: 'Anschreiben nicht gefunden.',
+          details: (fetchErr as { message?: string } | null)?.message,
+        }, { status: 404 })
       }
 
       if (!isPro && existing.edit_count >= MAX_FREE_EDITS) {
@@ -85,15 +108,12 @@ export async function POST(req: NextRequest) {
         .eq('id', id).eq('user_id', user.id)
         .select().single()
 
-      if (updateErr) {
-        console.error('cover-letter/save update error:', JSON.stringify(updateErr, null, 2))
-        return NextResponse.json({ error: 'Speichern fehlgeschlagen.' }, { status: 500 })
-      }
+      if (updateErr) return dbErr('update', updateErr)
 
       return NextResponse.json({ letter: updatedRaw as CoverLetterRow, editCount: newCount })
     }
 
-    // Insert new — count existing letters
+    // Insert new
     const { count } = await db
       .from('cover_letters').select('*', { count: 'exact', head: true }).eq('user_id', user.id)
     const total = (count as number | null) ?? 0
@@ -119,14 +139,16 @@ export async function POST(req: NextRequest) {
       })
       .select().single()
 
-    if (insertErr) {
-      console.error('cover-letter/save insert error:', JSON.stringify(insertErr, null, 2))
-      return NextResponse.json({ error: 'Speichern fehlgeschlagen.' }, { status: 500 })
-    }
+    if (insertErr) return dbErr('insert', insertErr)
 
     return NextResponse.json({ letter: insertedRaw as CoverLetterRow, editCount: 0 })
   } catch (err) {
+    const e = err as { message?: string; code?: string } | null
     console.error('cover-letter/save route error:', err)
-    return NextResponse.json({ error: 'Interner Fehler.' }, { status: 500 })
+    return NextResponse.json({
+      error: 'Interner Fehler.',
+      details: e?.message || String(err),
+      code: e?.code,
+    }, { status: 500 })
   }
 }
