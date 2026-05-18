@@ -54,37 +54,22 @@ const STATUS_COLORS: Record<AppStatus, string> = {
   Gesendet: '#8892A4', Angesehen: '#93AFFD', Interview: '#f59e0b', Angebot: '#4ADE80', Abgelehnt: '#f87171',
 }
 
-function makeMockJobs() {
-  const companies = [
-    { name: 'TechVision GmbH', init: 'TV', color: '#6366f1' },
-    { name: 'InnovateX', init: 'IX', color: '#0ea5e9' },
-    { name: 'Digital Solutions AG', init: 'DS', color: '#8b5cf6' },
-    { name: 'Smart Media Group', init: 'SM', color: '#f59e0b' },
-    { name: 'Karriere Hub GmbH', init: 'KH', color: '#10b981' },
-    { name: 'Alpine Software', init: 'AS', color: '#ec4899' },
-    { name: 'Vienna Fintech', init: 'VF', color: '#14b8a6' },
-  ]
-  const titles = ['Product Manager (m/w/d)', 'Business Analyst (m/w/d)', 'Consultant (m/w/d)', 'Marketing Manager (m/w/d)', 'Project Manager (m/w/d)', 'Senior Developer (m/w/d)', 'Data Scientist (m/w/d)']
-  const locations = ['Wien', 'München', 'Hamburg', 'Berlin', 'Graz', 'Zürich', 'Frankfurt']
-  const types = ['Vollzeit · Remote möglich', 'Vollzeit · Hybrid', 'Vollzeit', 'Teilzeit · Remote', 'Vollzeit · Vor Ort', 'Vollzeit · Remote', 'Vollzeit · Hybrid']
-  const salaries = [[55000, 70000], [50000, 65000], [48000, 63000], [45000, 58000], [52000, 67000], [65000, 85000], [60000, 78000]]
-  const matches = [92, 88, 80, 74, 68, 85, 77]
-  const skillSets = [['Product Management', 'Strategie', 'Kommunikation'], ['Analyse', 'Daten', 'Excel'], ['Beratung', 'Strategie', 'Präsentation'], ['Marketing', 'Social Media', 'Content'], ['Koordination', 'Teamführung', 'Reporting'], ['React', 'TypeScript', 'Node.js'], ['Python', 'ML', 'Statistics']]
-  const times = ['Vor 2 Stunden', 'Vor 5 Stunden', 'Vor 1 Tag', 'Vor 2 Tagen', 'Vor 3 Tagen', 'Gerade eben', 'Vor 4 Stunden']
-  // Mock contact emails — alternating to demo both Flow A and Flow B
-  const contactEmails = [
-    'bewerbung@techvision.de', null, 'jobs@digitalsolutions.at',
-    null, 'careers@karrierehub.de', null, 'apply@viennafintech.at',
-  ]
-  return companies.map((c, i) => ({
-    id: String(i + 1), company: c.name, initials: c.init, color: c.color,
-    title: titles[i], location: `${locations[i]}, Deutschland/Österreich`, type: types[i],
-    salary: `${salaries[i][0].toLocaleString('de')} € – ${salaries[i][1].toLocaleString('de')} €`,
-    match: matches[i], skills: skillSets[i], posted: times[i],
-    description: `Wir suchen einen engagierten ${titles[i].replace(' (m/w/d)', '')} für unser wachsendes Team bei ${c.name}. Sie bringen Erfahrung mit und arbeiten gerne im Team.`,
-    industry: i < 2 ? 'tech' : i < 4 ? 'marketing' : 'other',
-    contactEmail: contactEmails[i] as string | null,
-  }))
+interface DashJob {
+  id: string
+  company: string
+  initials: string
+  color: string
+  title: string
+  location: string
+  type: string
+  salary: string
+  match: number
+  skills: string[]
+  posted: string
+  description: string
+  industry: string
+  contactEmail: string | null
+  url: string
 }
 
 // ── Relative date formatter (German, never shows "Invalid Date") ──────────────
@@ -128,7 +113,7 @@ function extractContactEmail(job: RealJob): string | null {
   return found
 }
 
-function adaptJob(j: RealJob): ReturnType<typeof makeMockJobs>[0] {
+function adaptJob(j: RealJob): DashJob {
   const palette = ['#6366f1', '#0ea5e9', '#8b5cf6', '#f59e0b', '#10b981', '#ec4899', '#14b8a6']
   const seed = j.id.split('').reduce((a, c) => a + c.charCodeAt(0), 0)
   const color = palette[seed % palette.length]
@@ -141,6 +126,7 @@ function adaptJob(j: RealJob): ReturnType<typeof makeMockJobs>[0] {
     match: j.matchScore, skills: j.skills, posted: dateStr,
     description: j.description, industry: '',
     contactEmail: extractContactEmail(j),
+    url: j.url || '',
   }
 }
 
@@ -197,9 +183,9 @@ function MobileTopBar({ onHamburger, isPro, onUpgrade }: { onHamburger: () => vo
   )
 }
 
-function MobileDrawer({ active, onNav, profile, isPro, onUpgrade, onLogout, onClose }: {
+function MobileDrawer({ active, onNav, profile, isPro, onUpgrade, onLogout, onClose, avatarUrl }: {
   active: NavId; onNav: (id: NavId) => void
-  profile: UserProfile; isPro: boolean; onUpgrade: () => void; onLogout: () => void; onClose: () => void
+  profile: UserProfile; isPro: boolean; onUpgrade: () => void; onLogout: () => void; onClose: () => void; avatarUrl?: string
 }) {
   const initials = ((profile.first_name || '?').charAt(0) + (profile.last_name || '').charAt(0)).toUpperCase()
   return (
@@ -233,7 +219,9 @@ function MobileDrawer({ active, onNav, profile, isPro, onUpgrade, onLogout, onCl
           </div>
         )}
         <div style={{ padding: '12px 14px', borderTop: `0.5px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: C.white, flexShrink: 0 }}>{initials}</div>
+          <div style={{ width: 36, height: 36, borderRadius: '50%', background: avatarUrl ? 'transparent' : 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: C.white, flexShrink: 0, overflow: 'hidden' }}>
+            {avatarUrl ? <img src={avatarUrl} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : initials}
+          </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: C.white, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.first_name} {profile.last_name}</div>
             <div style={{ fontSize: 10, color: C.mid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.email}</div>
@@ -521,10 +509,10 @@ function setBookmarkPersisted(id: string, val: boolean) {
   localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(next))
 }
 
-function JobCard({ job, onClick, compact }: { job: ReturnType<typeof makeMockJobs>[0]; onClick: () => void; compact?: boolean }) {
+function JobCard({ job, onClick, compact }: { job: DashJob; onClick: () => void; compact?: boolean }) {
   const [bookmarked, setBookmarked] = useState(() => typeof window !== 'undefined' ? getBookmarks().includes(job.id) : false)
   const matchColor = job.match >= 85 ? C.success : job.match >= 70 ? C.amber : C.mid
-  const hasDirectEmail = !!(job as ReturnType<typeof makeMockJobs>[0] & { contactEmail?: string | null }).contactEmail
+  const hasDirectEmail = !!job.contactEmail
 
   return (
     <div
@@ -584,11 +572,13 @@ function MatchRing({ pct }: { pct: number }) {
   )
 }
 
-// ── Job detail modal ──────────────────────────────────────────────────────────
-function JobDetailModal({ job, profile, onClose }: { job: ReturnType<typeof makeMockJobs>[0]; profile: UserProfile; onClose: () => void }) {
-  const [step, setStep] = useState<'detail' | 'letter' | 'review'>('detail')
+// ── Job detail modal (premium 1-click apply) ──────────────────────────────────
+function JobDetailModal({ job, profile, onClose }: { job: DashJob; profile: UserProfile; onClose: () => void }) {
+  const [step, setStep] = useState<'detail' | 'letter' | 'apply'>('detail')
   const [loading, setLoading] = useState(false)
   const [letter, setLetter] = useState('')
+  const [applying, setApplying] = useState(false)
+  const [applied, setApplied] = useState(false)
   const supabase = createClient()
   const router = useRouter()
 
@@ -599,29 +589,63 @@ function JobDetailModal({ job, profile, onClose }: { job: ReturnType<typeof make
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userData: { fullname: `${profile.first_name || ''} ${profile.last_name || ''}`.trim(), city: '', industry: '', experience: '', skills: '', lastjob: '' },
+          userData: {
+            fullname: `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
+            city: (profile as UserProfile & Record<string, unknown>).city as string || '',
+            industry: (profile as UserProfile & Record<string, unknown>).industry as string || '',
+            experience: '', skills: '', lastjob: '',
+          },
           jobTitle: job.title, jobCompany: job.company, jobDescription: job.description, lang: 'de',
         }),
       })
       const data = await res.json()
       setLetter(data.coverLetter || 'Anschreiben konnte nicht generiert werden.')
-    } finally { setLoading(false) }
+    } catch { setLetter('Anschreiben konnte nicht generiert werden.') }
+    finally { setLoading(false) }
   }
 
-  async function saveApplication() {
-    await supabase.from('applications').insert({
-      user_id: profile.id, position: job.title, company: job.company,
-      template: 'classic', style: 'balanced',
-      cv_data: { profil: '', erfahrung: '', ausbildung: '', skills: [], sprachen: '', anschreiben: letter },
-      cover_letter: letter,
-    })
-    router.refresh(); onClose()
+  function downloadPDF() {
+    const firstName = profile.first_name || ''
+    const lastName  = profile.last_name  || ''
+    const filename  = `Bewerbung_${firstName}_${lastName}_${job.company}`.replace(/\s+/g, '_')
+    const content   = encodeURIComponent(letter)
+    const a = document.createElement('a')
+    a.href = `data:text/plain;charset=utf-8,${content}`
+    a.download = `${filename}.txt`
+    a.click()
   }
+
+  async function handleApply() {
+    setApplying(true)
+    try {
+      await supabase.from('applications').insert({
+        user_id: profile.id, position: job.title, company: job.company,
+        status: 'Gesendet', application_method: job.url ? 'portal' : 'email',
+        template: 'classic', style: 'balanced',
+        cv_data: {}, cover_letter: letter,
+        applied_at: new Date().toISOString(),
+      })
+      // Open portal or mailto
+      if (job.url) {
+        window.open(job.url, '_blank', 'noopener,noreferrer')
+        downloadPDF()
+      } else if (job.contactEmail) {
+        const subject = encodeURIComponent(`Bewerbung als ${job.title}`)
+        const body    = encodeURIComponent(letter)
+        window.location.href = `mailto:${job.contactEmail}?subject=${subject}&body=${body}`
+      }
+      setApplied(true)
+      router.refresh()
+    } finally { setApplying(false) }
+  }
+
+  const isWide = step === 'letter'
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 20, backdropFilter: 'blur(4px)' }}
       onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{ background: '#0D1117', borderRadius: 16, border: `0.5px solid rgba(255,255,255,0.1)`, width: '100%', maxWidth: 540, maxHeight: '90vh', overflow: 'auto' }}>
+      <div style={{ background: '#0D1117', borderRadius: 16, border: `0.5px solid rgba(255,255,255,0.1)`, width: '100%', maxWidth: isWide ? 900 : 540, maxHeight: '90vh', overflow: 'auto', transition: 'max-width .3s ease' }}>
+        {/* Header */}
         <div style={{ padding: '20px 24px', borderBottom: `0.5px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 14 }}>
           <div style={{ width: 48, height: 48, borderRadius: 12, background: job.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, color: C.white, flexShrink: 0 }}>{job.initials}</div>
           <div style={{ flex: 1 }}>
@@ -630,7 +654,9 @@ function JobDetailModal({ job, profile, onClose }: { job: ReturnType<typeof make
           </div>
           <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.06)', border: `0.5px solid ${C.border}`, borderRadius: '50%', width: 30, height: 30, cursor: 'pointer', color: C.mid, fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
         </div>
+
         <div style={{ padding: 24 }}>
+          {/* STEP 1: Detail */}
           {step === 'detail' && (
             <>
               <div style={{ display: 'flex', gap: 20, alignItems: 'center', marginBottom: 24, padding: 20, background: 'rgba(27,46,107,0.1)', borderRadius: 12, border: `0.5px solid rgba(27,46,107,0.3)` }}>
@@ -640,28 +666,41 @@ function JobDetailModal({ job, profile, onClose }: { job: ReturnType<typeof make
                   <div style={{ fontSize: 12, color: C.mid }}>💰 {job.salary} · {job.type}</div>
                 </div>
               </div>
+              <div style={{ marginBottom: 16, fontSize: 13, color: 'rgba(255,255,255,0.65)', lineHeight: 1.65 }}>
+                {job.description || `Wir suchen einen ${job.title} für ${job.company}.`}
+              </div>
               <div style={{ marginBottom: 24 }}>
                 {[
-                  `Dein Profil passt sehr gut zur gesuchten Position als ${job.title}.`,
+                  `Dein Profil passt zur gesuchten Position als ${job.title}.`,
                   `${job.company} sucht Kandidaten mit genau deinem Erfahrungshintergrund.`,
-                  `Skills ${job.skills.join(', ')} decken sich mit deinem Profil.`,
-                ].map((p, i) => (
+                  job.skills.length > 0 ? `Skills ${job.skills.slice(0,3).join(', ')} decken sich mit deinem Profil.` : null,
+                ].filter(Boolean).map((pt, i) => (
                   <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
                     <span style={{ color: C.success, fontSize: 12, flexShrink: 0 }}>✓</span>
-                    <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', lineHeight: 1.5 }}>{p}</span>
+                    <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', lineHeight: 1.5 }}>{pt}</span>
                   </div>
                 ))}
               </div>
-              <button style={{ width: '100%', padding: 13, borderRadius: 10, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 600 }} onClick={generateLetter}>
-                ⚡ Bewerbung erstellen →
-              </button>
+              <div style={{ display: 'flex', gap: 10 }}>
+                {job.url && (
+                  <a href={job.url} target="_blank" rel="noopener noreferrer"
+                    style={{ flex: 1, padding: 12, borderRadius: 10, background: 'rgba(255,255,255,0.05)', color: C.navy3, border: `0.5px solid rgba(255,255,255,0.1)`, fontFamily: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer', textDecoration: 'none', textAlign: 'center' as const }}>
+                    🌐 Zum Stellenportal
+                  </a>
+                )}
+                <button style={{ flex: 2, padding: 13, borderRadius: 10, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 600 }} onClick={generateLetter}>
+                  ⚡ Bewerbung erstellen →
+                </button>
+              </div>
             </>
           )}
+
+          {/* STEP 2: Side-by-side letter + CV summary */}
           {step === 'letter' && (
             <>
-              <div style={{ fontSize: 14, fontWeight: 600, color: C.white, marginBottom: 12 }}>✍️ KI-Anschreiben</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: C.white, marginBottom: 14 }}>✍️ KI-Anschreiben erstellen</div>
               {loading ? (
-                <div style={{ textAlign: 'center', padding: '2rem', color: C.mid }}>
+                <div style={{ textAlign: 'center', padding: '3rem', color: C.mid }}>
                   <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginBottom: 12 }}>
                     {[0, .2, .4].map(d => <span key={d} style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: C.navy2, animation: `p 1.2s ease-in-out ${d}s infinite` }} />)}
                   </div>
@@ -669,25 +708,79 @@ function JobDetailModal({ job, profile, onClose }: { job: ReturnType<typeof make
                 </div>
               ) : (
                 <>
-                  <textarea value={letter} onChange={e => setLetter(e.target.value)} rows={10} style={{ width: '100%', padding: 12, borderRadius: 8, border: `0.5px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.8)', fontFamily: 'inherit', fontSize: 13, lineHeight: 1.7, resize: 'vertical', outline: 'none' }} />
-                  <button style={{ width: '100%', marginTop: 12, padding: 12, borderRadius: 10, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 600 }} onClick={() => setStep('review')}>
-                    Bewerbung prüfen →
-                  </button>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                    {/* Left: editable letter */}
+                    <div>
+                      <div style={{ fontSize: 11, color: C.mid, marginBottom: 6, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '.06em' }}>Anschreiben</div>
+                      <textarea
+                        value={letter}
+                        onChange={e => setLetter(e.target.value)}
+                        rows={14}
+                        style={{ width: '100%', padding: 12, borderRadius: 8, border: `0.5px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.85)', fontFamily: 'inherit', fontSize: 12, lineHeight: 1.7, resize: 'vertical', outline: 'none', boxSizing: 'border-box' as const }}
+                      />
+                    </div>
+                    {/* Right: CV/profile summary */}
+                    <div>
+                      <div style={{ fontSize: 11, color: C.mid, marginBottom: 6, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '.06em' }}>Dein Profil</div>
+                      <div style={{ padding: 14, borderRadius: 8, border: `0.5px solid rgba(255,255,255,0.08)`, background: 'rgba(255,255,255,0.02)', fontSize: 12, color: 'rgba(255,255,255,0.7)', lineHeight: 1.7 }}>
+                        <div style={{ fontWeight: 600, color: C.white, marginBottom: 6 }}>{profile.first_name} {profile.last_name}</div>
+                        {(profile as UserProfile & Record<string, unknown>).city && <div>📍 {String((profile as UserProfile & Record<string, unknown>).city)}</div>}
+                        {(profile as UserProfile & Record<string, unknown>).desired_position && <div style={{ marginTop: 4 }}>🎯 {String((profile as UserProfile & Record<string, unknown>).desired_position)}</div>}
+                        {(profile as UserProfile & Record<string, unknown>).industry && <div style={{ marginTop: 4 }}>🏢 {String((profile as UserProfile & Record<string, unknown>).industry)}</div>}
+                        <div style={{ marginTop: 12, paddingTop: 10, borderTop: `0.5px solid rgba(255,255,255,0.07)`, fontSize: 11, color: C.mid }}>
+                          💡 Lebenslauf & Anschreiben findest du unter CV und Anschreiben
+                        </div>
+                      </div>
+                      {/* Apply action */}
+                      <div style={{ marginTop: 12, padding: 14, borderRadius: 8, border: `0.5px solid rgba(27,46,107,0.3)`, background: 'rgba(27,46,107,0.08)' }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: C.white, marginBottom: 4 }}>Bewerbungsweg</div>
+                        <div style={{ fontSize: 11, color: C.mid }}>
+                          {job.url ? '🌐 Über Stellenportal' : job.contactEmail ? `📧 An ${job.contactEmail}` : '🌐 Direkt beim Unternehmen'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 10 }}>
+                    <button onClick={() => setStep('detail')} style={{ padding: 11, borderRadius: 9, background: 'transparent', color: 'rgba(255,255,255,0.6)', border: `0.5px solid ${C.border}`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13 }}>← Zurück</button>
+                    <button onClick={() => setStep('apply')} disabled={!letter} style={{ padding: 12, borderRadius: 10, background: !letter ? 'rgba(255,255,255,0.05)' : `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: !letter ? C.mid : C.white, border: 'none', cursor: !letter ? 'default' : 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 600 }}>
+                      Bewerbung prüfen →
+                    </button>
+                  </div>
                 </>
               )}
             </>
           )}
-          {step === 'review' && (
+
+          {/* STEP 3: Apply */}
+          {step === 'apply' && (
             <>
-              <div style={{ fontSize: 14, fontWeight: 600, color: C.white, marginBottom: 16 }}>✅ Bewerbung bestätigen</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: C.white, marginBottom: 16 }}>✅ Jetzt bewerben</div>
               <div style={{ padding: '12px 16px', borderRadius: 10, background: 'rgba(27,46,107,0.1)', border: `0.5px solid rgba(27,46,107,0.3)`, marginBottom: 16 }}>
                 <div style={{ fontSize: 15, fontWeight: 600, color: C.white }}>{job.title}</div>
-                <div style={{ fontSize: 13, color: C.mid }}>{job.company}</div>
+                <div style={{ fontSize: 13, color: C.mid }}>{job.company} · {job.location}</div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <button onClick={() => setStep('letter')} style={{ padding: 11, borderRadius: 9, background: 'transparent', color: 'rgba(255,255,255,0.6)', border: `0.5px solid ${C.border}`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13 }}>← Bearbeiten</button>
-                <button onClick={saveApplication} style={{ padding: 11, borderRadius: 9, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600 }}>Jetzt bewerben ✓</button>
-              </div>
+              {applied ? (
+                <div style={{ textAlign: 'center', padding: '20px', color: C.success, fontSize: 14 }}>
+                  ✓ Bewerbung erfasst! Viel Erfolg!
+                  <button onClick={onClose} style={{ display: 'block', margin: '16px auto 0', padding: '10px 24px', borderRadius: 9, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600 }}>Schließen</button>
+                </div>
+              ) : (
+                <>
+                  <div style={{ marginBottom: 16, fontSize: 13, color: C.mid, lineHeight: 1.6 }}>
+                    {job.url
+                      ? 'Das Stellenportal wird in einem neuen Tab geöffnet. Dein Anschreiben wird automatisch als Datei heruntergeladen.'
+                      : job.contactEmail
+                        ? `Dein E-Mail-Programm öffnet sich mit dem fertigen Anschreiben an ${job.contactEmail}.`
+                        : 'Deine Bewerbung wird in deinem Konto gespeichert.'}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <button onClick={() => setStep('letter')} style={{ padding: 11, borderRadius: 9, background: 'transparent', color: 'rgba(255,255,255,0.6)', border: `0.5px solid ${C.border}`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13 }}>← Bearbeiten</button>
+                    <button onClick={handleApply} disabled={applying} style={{ padding: 11, borderRadius: 9, background: applying ? 'rgba(255,255,255,0.05)' : `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: applying ? C.mid : C.white, border: 'none', cursor: applying ? 'not-allowed' : 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600 }}>
+                      {applying ? '…' : job.url ? '🌐 Zum Portal + Download' : job.contactEmail ? '📧 Per E-Mail bewerben' : '✓ Bewerbung erfassen'}
+                    </button>
+                  </div>
+                </>
+              )}
             </>
           )}
         </div>
@@ -843,11 +936,11 @@ function RightSidebar({ applications, profile, onNav, isMobile }: { applications
 }
 
 // ── Section: Jobs finden (live API) ──────────────────────────────────────────
-function JobsSection({ isPro, onSelect, onNeedPro, initialSearch, profile }: { isPro: boolean; onSelect: (j: ReturnType<typeof makeMockJobs>[0]) => void; onNeedPro: () => void; initialSearch?: string; profile?: UserProfile }) {
+function JobsSection({ isPro, onSelect, onNeedPro, initialSearch, profile }: { isPro: boolean; onSelect: (j: DashJob) => void; onNeedPro: () => void; initialSearch?: string; profile?: UserProfile }) {
   const [search, setSearch]     = useState(initialSearch || profile?.desired_position || '')
   const [location, setLocation] = useState(profile?.city || '')
   const [workType, setWorkType] = useState('')
-  const [jobs, setJobs]         = useState<ReturnType<typeof makeMockJobs>>([])
+  const [jobs, setJobs]         = useState<DashJob[]>([])
   const [loading, setLoading]   = useState(false)
   const [apiError, setApiError] = useState('')
   const [searched, setSearched] = useState(false)
@@ -1725,7 +1818,10 @@ function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPh
   async function deletePhoto() {
     setPhotoPreview(null)
     setExistingAvatar('')
-    await supabase.from('profiles').update({ photo_url: null, avatar_url: null } as Record<string, unknown>).eq('id', profile.id)
+    await fetch('/api/profile/save-photo', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ photoUrl: null }),
+    })
     if (onPhotoUpdate) onPhotoUpdate('')
   }
 
@@ -2549,7 +2645,7 @@ interface CoverLetterMeta { id: string; job_title: string; company: string; desi
 function ApplicationModal({
   job, profile, isPro, applicationsCount, onClose, onSuccess,
 }: {
-  job: ReturnType<typeof makeMockJobs>[0]
+  job: DashJob
   profile: UserProfile
   isPro: boolean
   applicationsCount: number
@@ -2558,8 +2654,7 @@ function ApplicationModal({
 }) {
   const MAX_FREE_APPS = 5
   // Auto-detect email from job data
-  const jobWithEmail = job as ReturnType<typeof makeMockJobs>[0] & { contactEmail?: string | null }
-  const detectedEmail = jobWithEmail.contactEmail || null
+  const detectedEmail = job.contactEmail || null
 
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1)
   const [flowType, setFlowType] = useState<'email' | 'portal'>(detectedEmail ? 'email' : 'portal')
@@ -2847,8 +2942,8 @@ function ApplicationModal({
 // ── Main dashboard ────────────────────────────────────────────────────────────
 export default function DashboardClient({ profile, applications, justUpgraded, upgradeStatus }: Props) {
   const [activeNav, setActiveNav] = useState<NavId>('dashboard')
-  const [selectedJob, setSelectedJob] = useState<ReturnType<typeof makeMockJobs>[0] | null>(null)
-  const [applyJob, setApplyJob] = useState<ReturnType<typeof makeMockJobs>[0] | null>(null)
+  const [selectedJob, setSelectedJob] = useState<DashJob | null>(null)
+  const [applyJob, setApplyJob] = useState<DashJob | null>(null)
   const [showUpgrade, setShowUpgrade] = useState(false)
   const [globalSearch, setGlobalSearch] = useState('')
   const [globalToast, setGlobalToast] = useState<string>('')
@@ -2878,8 +2973,8 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
     return () => clearTimeout(t)
   }, [globalToast])
 
-  const mockJobs = useMemo(() => makeMockJobs(), [])
-  const [dashJobs, setDashJobs] = useState<ReturnType<typeof makeMockJobs>>([])
+  const [dashJobs, setDashJobs] = useState<DashJob[]>([])
+  const [dashJobsLoading, setDashJobsLoading] = useState(true)
   const profileScore = getProfileCompleteness(profile).score
 
   // Fetch real jobs for dashboard home "Top Job Matches" using profile position
@@ -2887,9 +2982,11 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
     const params = new URLSearchParams()
     if (profile.desired_position) params.set('q', profile.desired_position)
     if (profile.city) params.set('location', profile.city)
+    setDashJobsLoading(true)
     fetch(`/api/jobs/search?${params}`).then(r => r.json()).then(data => {
       if (data.jobs) setDashJobs((data.jobs as RealJob[]).slice(0, 3).map(adaptJob))
-    }).catch(() => setDashJobs(mockJobs.slice(0, 3)))
+      else setDashJobs([])
+    }).catch(() => setDashJobs([])).finally(() => setDashJobsLoading(false))
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleLogout() {
@@ -2992,19 +3089,39 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
               <div style={{ fontSize: 15, fontWeight: 700, color: C.white }}>Top Job Matches für dich</div>
               <span style={{ fontSize: 13, color: C.navy3, cursor: 'pointer', fontWeight: 500 }} onClick={() => setActiveNav('jobs')}>Alle →</span>
             </div>
-            {dashJobs.slice(0, 3).map(job => (
-              <div key={job.id} style={{ position: 'relative' }}>
-                <JobCard job={job} onClick={() => {
-                  if (!isPro) { setShowUpgrade(true); return }
-                  setSelectedJob(job)
-                }} />
-                <button
-                  onClick={e => { e.stopPropagation(); setApplyJob(job) }}
-                  style={{ position: 'absolute', bottom: 10, right: 12, padding: '5px 12px', borderRadius: 7, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600, zIndex: 1 }}>
-                  Bewerben →
-                </button>
+            {dashJobsLoading ? (
+              [0, 1, 2].map(i => (
+                <div key={i} style={{ padding: '16px 18px', borderRadius: 12, border: `0.5px solid ${C.border}`, background: 'rgba(255,255,255,0.015)', marginBottom: 10, animation: 'pulse 1.4s ease-in-out infinite' }}>
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                    <div style={{ width: 46, height: 46, borderRadius: 10, background: 'rgba(255,255,255,0.08)' }} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ height: 10, width: '40%', background: 'rgba(255,255,255,0.08)', borderRadius: 4, marginBottom: 8 }} />
+                      <div style={{ height: 13, width: '70%', background: 'rgba(255,255,255,0.08)', borderRadius: 4, marginBottom: 8 }} />
+                      <div style={{ height: 10, width: '55%', background: 'rgba(255,255,255,0.08)', borderRadius: 4 }} />
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : dashJobs.length === 0 ? (
+              <div style={{ padding: '24px 18px', borderRadius: 12, border: `0.5px solid ${C.border}`, background: 'rgba(255,255,255,0.01)', textAlign: 'center', color: C.mid, fontSize: 13, lineHeight: 1.6 }}>
+                Keine passenden Jobs gefunden.<br />
+                <span style={{ color: C.navy3, cursor: 'pointer' }} onClick={() => setActiveNav('profile')}>Ergänze deinen Wunschberuf im Profil →</span>
               </div>
-            ))}
+            ) : (
+              dashJobs.slice(0, 3).map(job => (
+                <div key={job.id} style={{ position: 'relative' }}>
+                  <JobCard job={job} onClick={() => {
+                    if (!isPro) { setShowUpgrade(true); return }
+                    setSelectedJob(job)
+                  }} />
+                  <button
+                    onClick={e => { e.stopPropagation(); setApplyJob(job) }}
+                    style={{ position: 'absolute', bottom: 10, right: 12, padding: '5px 12px', borderRadius: 7, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600, zIndex: 1 }}>
+                    Bewerben →
+                  </button>
+                </div>
+              ))
+            )}
           </div>
 
           {/* ── KI banner: stack on mobile ── */}
@@ -3052,7 +3169,7 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
           </main>
           <BottomNav active={activeNav} onNav={handleNav} />
         </div>
-        {drawerOpen && <MobileDrawer active={activeNav} onNav={handleNav} profile={profile} isPro={isPro} onUpgrade={() => setShowUpgrade(true)} onLogout={handleLogout} onClose={() => setDrawerOpen(false)} />}
+        {drawerOpen && <MobileDrawer active={activeNav} onNav={handleNav} profile={profile} isPro={isPro} onUpgrade={() => setShowUpgrade(true)} onLogout={handleLogout} onClose={() => setDrawerOpen(false)} avatarUrl={avatarUrl} />}
         {modals}
       </>
     )
