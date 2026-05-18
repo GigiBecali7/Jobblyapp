@@ -197,9 +197,9 @@ function MobileTopBar({ onHamburger, isPro, onUpgrade }: { onHamburger: () => vo
   )
 }
 
-function MobileDrawer({ active, onNav, profile, isPro, onUpgrade, onLogout, onClose }: {
+function MobileDrawer({ active, onNav, profile, isPro, onUpgrade, onLogout, onClose, avatarUrl }: {
   active: NavId; onNav: (id: NavId) => void
-  profile: UserProfile; isPro: boolean; onUpgrade: () => void; onLogout: () => void; onClose: () => void
+  profile: UserProfile; isPro: boolean; onUpgrade: () => void; onLogout: () => void; onClose: () => void; avatarUrl?: string
 }) {
   const initials = ((profile.first_name || '?').charAt(0) + (profile.last_name || '').charAt(0)).toUpperCase()
   return (
@@ -233,7 +233,9 @@ function MobileDrawer({ active, onNav, profile, isPro, onUpgrade, onLogout, onCl
           </div>
         )}
         <div style={{ padding: '12px 14px', borderTop: `0.5px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: C.white, flexShrink: 0 }}>{initials}</div>
+          <div style={{ width: 36, height: 36, borderRadius: '50%', background: avatarUrl ? 'transparent' : 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: C.white, flexShrink: 0, overflow: 'hidden' }}>
+            {avatarUrl ? <img src={avatarUrl} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : initials}
+          </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: C.white, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.first_name} {profile.last_name}</div>
             <div style={{ fontSize: 10, color: C.mid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.email}</div>
@@ -1725,7 +1727,10 @@ function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPh
   async function deletePhoto() {
     setPhotoPreview(null)
     setExistingAvatar('')
-    await supabase.from('profiles').update({ photo_url: null, avatar_url: null } as Record<string, unknown>).eq('id', profile.id)
+    await fetch('/api/profile/save-photo', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ photoUrl: null }),
+    })
     if (onPhotoUpdate) onPhotoUpdate('')
   }
 
@@ -3052,7 +3057,7 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
           </main>
           <BottomNav active={activeNav} onNav={handleNav} />
         </div>
-        {drawerOpen && <MobileDrawer active={activeNav} onNav={handleNav} profile={profile} isPro={isPro} onUpgrade={() => setShowUpgrade(true)} onLogout={handleLogout} onClose={() => setDrawerOpen(false)} />}
+        {drawerOpen && <MobileDrawer active={activeNav} onNav={handleNav} profile={profile} isPro={isPro} onUpgrade={() => setShowUpgrade(true)} onLogout={handleLogout} onClose={() => setDrawerOpen(false)} avatarUrl={avatarUrl} />}
         {modals}
       </>
     )

@@ -4,42 +4,50 @@ import { createServiceClient } from '@/lib/supabase/service'
 
 export async function POST(req: NextRequest) {
   try {
-    // Verify auth
     const authClient = await createClient()
     const { data: { user }, error: authErr } = await authClient.auth.getUser()
     if (authErr || !user) {
       return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
     }
 
-    const { photoUrl } = await req.json()
-    if (!photoUrl || typeof photoUrl !== 'string') {
-      return NextResponse.json({ error: 'photoUrl fehlt' }, { status: 422 })
+    const body = await req.json()
+    const { photoUrl } = body
+    // photoUrl can be null (delete) or a string (save)
+    if (photoUrl !== null && (typeof photoUrl !== 'string' || !photoUrl)) {
+      return NextResponse.json({ error: 'photoUrl ungültig' }, { status: 422 })
     }
 
-    // Use service role to bypass RLS for profile update
-    // @ts-ignore
-    const db = createServiceClient() as any
-    const { error: dbErr } = await db
-      .from('profiles')
-      .update({ photo_url: photoUrl, avatar_url: photoUrl })
-      .eq('id', user.id)
+    // Try service role first (bypasses RLS), fall back to anon client with session
+    let dbErr: unknown = null
+
+    if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      // @ts-ignore — service client is untyped
+      const db = createServiceClient() as any
+      const result = await db
+        .from('profiles')
+        .update({ photo_url: photoUrl, avatar_url: photoUrl })
+        .eq('id', user.id)
+      dbErr = result.error
+    } else {
+      // Fallback: anon client (works when RLS allows user to update own row)
+      const { error } = await authClient
+        .from('profiles')
+        .update({ photo_url: photoUrl, avatar_url: photoUrl } as Record<string, unknown>)
+        .eq('id', user.id)
+      dbErr = error
+    }
 
     if (dbErr) {
+      const e = dbErr as { message?: string; code?: string }
       console.error('profile/save-photo DB error:', JSON.stringify(dbErr, null, 2))
       return NextResponse.json({
         error: 'Foto konnte nicht gespeichert werden.',
-        details: (dbErr as { message?: string }).message,
+        details: e?.message,
+        code: e?.code,
       }, { status: 500 })
     }
 
-    // Verify it was saved
-    const { data: verify } = await db
-      .from('profiles')
-      .select('photo_url')
-      .eq('id', user.id)
-      .single()
-    console.log('profile/save-photo verified:', (verify as { photo_url?: string } | null)?.photo_url?.slice(0, 60))
-
+    console.log(`profile/save-photo ok for user ${user.id}: ${String(photoUrl).slice(0, 60)}`)
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error('profile/save-photo error:', err)
