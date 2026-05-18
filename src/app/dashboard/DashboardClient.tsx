@@ -263,9 +263,9 @@ function BottomNav({ active, onNav }: { active: NavId; onNav: (id: NavId) => voi
 }
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
-function Sidebar({ active, onNav, profile, isPro, onUpgrade, onLogout, jobCount }: {
+function Sidebar({ active, onNav, profile, isPro, onUpgrade, onLogout, jobCount, avatarUrl }: {
   active: NavId; onNav: (id: NavId) => void
-  profile: UserProfile; isPro: boolean; onUpgrade: () => void; onLogout: () => void; jobCount?: number
+  profile: UserProfile; isPro: boolean; onUpgrade: () => void; onLogout: () => void; jobCount?: number; avatarUrl?: string
 }) {
   const [showPopup, setShowPopup] = useState(false)
   const router = useRouter()
@@ -335,12 +335,14 @@ function Sidebar({ active, onNav, profile, isPro, onUpgrade, onLogout, jobCount 
       {/* User footer with hover popup */}
       <div style={{ padding: '12px 14px', borderTop: `0.5px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 10, position: 'relative' }}>
         <div
-          style={{ width: 34, height: 34, borderRadius: '50%', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: C.white, flexShrink: 0, cursor: 'pointer', position: 'relative' }}
+          style={{ width: 34, height: 34, borderRadius: '50%', background: avatarUrl ? 'transparent' : 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: C.white, flexShrink: 0, cursor: 'pointer', position: 'relative', overflow: 'hidden' }}
           onMouseEnter={() => setShowPopup(true)}
           onMouseLeave={() => setShowPopup(false)}
           onClick={() => { setShowPopup(false); onNav('profile') }}
         >
-          {initials}
+          {avatarUrl
+            ? <img src={avatarUrl} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            : initials}
           {showPopup && <AvatarPopup profile={profile} isPro={isPro} onNavigate={() => { setShowPopup(false); onNav('profile') }} side="left" />}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -1625,17 +1627,20 @@ function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPh
   const [pwSent, setPwSent] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
-  const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [photoUploading, setPhotoUploading] = useState(false)
+  const [photoToast, setPhotoToast] = useState<{ msg: string; ok: boolean } | null>(null)
 
   const p = profile as UserProfile & Record<string, string | number | boolean>
-  const existingAvatar = String(p.photo_url || p.avatar_url || '')
+  const [existingAvatar, setExistingAvatar] = useState(String(p.photo_url || p.avatar_url || ''))
 
   const [form, setForm] = useState({
     first_name: profile.first_name || '',
     last_name: profile.last_name || '',
     phone: String(p.phone || ''),
     city: String(p.city || ''),
+    address: String(p.address || ''),
+    zip_code: String(p.zip_code || ''),
+    country: String(p.country || 'Österreich'),
     linkedin: String(p.linkedin || ''),
     birthday: String(p.birthday || ''),
   })
@@ -1658,15 +1663,61 @@ function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPh
     }
   }
 
-  function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+  function showPhotoToast(msg: string, ok = true) {
+    setPhotoToast({ msg, ok })
+    setTimeout(() => setPhotoToast(null), 3500)
+  }
+
+  async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    setPhotoFile(file)
-    setPhotoPreview(URL.createObjectURL(file))
+
+    // Validate file type and size
+    const allowed = ['image/jpeg', 'image/png', 'image/webp']
+    if (!allowed.includes(file.type)) {
+      showPhotoToast('Nur JPG, PNG oder WebP erlaubt', false); return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showPhotoToast('Foto zu groß — max. 5 MB', false); return
+    }
+
+    const objectUrl = URL.createObjectURL(file)
+    setPhotoPreview(objectUrl)
+    setPhotoUploading(true)
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+      const path = `${profile.id}/profile.${ext}`
+      const { data: uploadData, error: uploadErr } = await supabase.storage
+        .from('avatars')
+        .upload(path, file, { upsert: true, contentType: file.type })
+      if (uploadErr) {
+        console.error('Photo upload error:', uploadErr.message)
+        showPhotoToast(`Upload fehlgeschlagen: ${uploadErr.message}`, false)
+        setPhotoPreview(existingAvatar || null)
+        return
+      }
+      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(uploadData!.path)
+      const url = `${urlData.publicUrl}?t=${Date.now()}`
+      const { error: dbErr } = await supabase.from('profiles')
+        .update({ photo_url: url, avatar_url: url } as Record<string, unknown>)
+        .eq('id', profile.id)
+      if (dbErr) console.error('Photo DB save error:', dbErr.message)
+      setExistingAvatar(url)
+      setPhotoPreview(url)
+      if (onPhotoUpdate) onPhotoUpdate(url)
+      showPhotoToast('Foto gespeichert ✅')
+    } catch (err) {
+      console.error('Photo upload exception:', err)
+      showPhotoToast('Upload fehlgeschlagen', false)
+      setPhotoPreview(existingAvatar || null)
+    } finally {
+      setPhotoUploading(false)
+    }
   }
 
   async function deletePhoto() {
-    setPhotoPreview(null); setPhotoFile(null)
+    setPhotoPreview(null)
+    setExistingAvatar('')
     await supabase.from('profiles').update({ photo_url: null, avatar_url: null } as Record<string, unknown>).eq('id', profile.id)
     if (onPhotoUpdate) onPhotoUpdate('')
   }
@@ -1674,31 +1725,12 @@ function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPh
   async function save() {
     setSaving(true); setSaved(false)
     try {
-      let finalPhotoUrl = existingAvatar
-      if (photoFile) {
-        setPhotoUploading(true)
-        const ext = photoFile.name.split('.').pop() || 'jpg'
-        const path = `${profile.id}/avatar.${ext}`
-        const { data: uploadData, error: uploadErr } = await supabase.storage
-          .from('avatars')
-          .upload(path, photoFile, { upsert: true })
-        if (uploadErr) {
-          console.error('Photo upload error:', uploadErr.message)
-          // Still proceed with saving other form fields
-        } else if (uploadData) {
-          const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(uploadData.path)
-          // Append cache-bust so browser re-fetches updated avatar
-          finalPhotoUrl = `${urlData.publicUrl}?t=${Date.now()}`
-        }
-        setPhotoUploading(false)
-      }
       await supabase.from('profiles').update({
         ...form, ...prefs, ...notifications,
-        ...(finalPhotoUrl ? { photo_url: finalPhotoUrl, avatar_url: finalPhotoUrl } : {}),
+        ...(existingAvatar ? { photo_url: existingAvatar, avatar_url: existingAvatar } : {}),
       } as Record<string, unknown>).eq('id', profile.id)
-      if (finalPhotoUrl && photoFile && onPhotoUpdate) onPhotoUpdate(finalPhotoUrl)
       setSaved(true); setTimeout(() => setSaved(false), 3000)
-    } finally { setSaving(false); setPhotoUploading(false) }
+    } finally { setSaving(false) }
   }
 
   async function sendPwReset() {
@@ -1711,9 +1743,21 @@ function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPh
   const initials = ((profile.first_name || '?').charAt(0) + (profile.last_name || '').charAt(0)).toUpperCase()
   const currentPhoto = photoPreview || existingAvatar || null
 
-  // Profile completion score
-  const completionFields = [form.first_name, form.last_name, form.phone, form.city, form.linkedin, prefs.industry, prefs.position, currentPhoto]
-  const completionScore = Math.round((completionFields.filter(Boolean).length / completionFields.length) * 100)
+  // Profile completion score — build a merged profile-like object from live form state
+  const completionScore = getProfileCompleteness({
+    ...profile,
+    first_name: form.first_name,
+    last_name: form.last_name,
+    phone: form.phone,
+    city: form.city,
+    address: form.address,
+    zip_code: form.zip_code,
+    photo_url: currentPhoto || profile.photo_url,
+    industry: prefs.industry,
+    position: prefs.position,
+    salary_target: prefs.salary_target,
+    work_model: prefs.work_model,
+  } as UserProfile).score
 
   const inStyle: React.CSSProperties = {
     width: '100%', padding: '10px 14px', minHeight: 44, borderRadius: 9,
@@ -1743,6 +1787,11 @@ function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPh
 
       {/* Toast */}
       {saved && <div className="profile-save-toast">Gespeichert ✓</div>}
+      {photoToast && (
+        <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 9999, padding: '12px 20px', borderRadius: 10, fontSize: 14, fontWeight: 500, backgroundColor: photoToast.ok ? '#0D2A1A' : '#2A0D0D', color: photoToast.ok ? C.success : '#f87171', border: `1px solid ${photoToast.ok ? '#2A6B47' : '#6B2A2A'}` }}>
+          {photoToast.msg}
+        </div>
+      )}
 
       <h2 style={{ fontSize: 22, fontWeight: 700, color: C.white, marginBottom: 24 }}>Meine Daten</h2>
 
@@ -1795,6 +1844,11 @@ function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPh
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
               {field('Telefon', 'phone', 'tel', '+43 ...')}
               {field('Stadt', 'city', 'text', 'Wien')}
+            </div>
+            {field('Adresse (Straße & Hausnummer)', 'address', 'text', 'Mariahilfer Straße 100')}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+              {field('PLZ', 'zip_code', 'text', '1060')}
+              {field('Land', 'country', 'text', 'Österreich')}
             </div>
             {field('LinkedIn', 'linkedin', 'url', 'https://linkedin.com/in/...')}
             {field('Geburtstag', 'birthday', 'date')}
@@ -1873,7 +1927,7 @@ function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPh
 
           <button onClick={save} disabled={saving}
             style={{ width: '100%', padding: 15, minHeight: 50, borderRadius: 10, background: saving ? 'rgba(255,255,255,0.06)' : `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: saving ? C.mid : C.white, border: 'none', cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-            {saving ? (photoUploading ? '📷 Foto hochladen…' : 'Speichern…') : '💾 Änderungen speichern'}
+            {photoUploading ? '📷 Foto hochladen…' : saving ? 'Speichern…' : '💾 Änderungen speichern'}
           </button>
         </div>
 
@@ -1908,7 +1962,7 @@ function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPh
                 [currentPhoto, 'Profilfoto'],
                 [form.phone, 'Telefonnummer'],
                 [form.city, 'Stadt'],
-                [form.linkedin, 'LinkedIn'],
+                [form.address && form.zip_code, 'Adresse & PLZ'],
                 [prefs.industry, 'Branche'],
                 [prefs.position, 'Wunschposition'],
               ].map(([done, label]) => (
@@ -1942,9 +1996,10 @@ function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPh
             {[
               ['👤', [form.first_name, form.last_name].filter(Boolean).join(' ') || '—'],
               ['📍', form.city || '—'],
-              ['💼', prefs.position || '—'],
+              ['💼', prefs.position || String(p.current_position || '') || '—'],
               ['🏢', prefs.industry || '—'],
               ['💶', prefs.salary_target ? prefs.salary_target.toLocaleString('de') + ' €' : '—'],
+              ['🔄', prefs.work_model === 'remote' ? '🏠 Remote' : prefs.work_model === 'office' ? '🏢 Vor Ort' : prefs.work_model === 'hybrid' ? '🔄 Hybrid' : '—'],
             ].map(([icon, val]) => (
               <div key={String(icon)} style={{ display: 'flex', gap: 10, marginBottom: 8, alignItems: 'flex-start' }}>
                 <span style={{ fontSize: 13, flexShrink: 0 }}>{String(icon)}</span>
@@ -2997,7 +3052,7 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
   return (
     <>
       <div style={{ display: 'flex', height: '100vh', background: C.bg, overflow: 'hidden' }}>
-        <Sidebar active={activeNav} onNav={handleNav} profile={profile} isPro={isPro} onUpgrade={() => setShowUpgrade(true)} onLogout={handleLogout} jobCount={dashJobs.length} />
+        <Sidebar active={activeNav} onNav={handleNav} profile={profile} isPro={isPro} onUpgrade={() => setShowUpgrade(true)} onLogout={handleLogout} jobCount={dashJobs.length} avatarUrl={avatarUrl} />
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
           <TopBar profile={profile} isPro={isPro} onUpgrade={() => setShowUpgrade(true)} onNav={handleNav} onSearch={term => { setGlobalSearch(term); setActiveNav('jobs') }} avatarUrl={avatarUrl} />

@@ -14,7 +14,7 @@ export async function validateProfileForAI(
 ): Promise<AIValidationResult> {
   const { data: profile } = await supabase
     .from('profiles')
-    .select('first_name, last_name, phone, city, position, current_position, experience, skills')
+    .select('first_name, last_name, phone, city, address, zip_code, position, current_position, experience, skills')
     .eq('id', userId)
     .single()
 
@@ -25,6 +25,8 @@ export async function validateProfileForAI(
   if (!userEmail?.trim())           missing.push({ field: 'email',      label: 'E-Mail-Adresse' })
   if (!profile?.phone?.trim())      missing.push({ field: 'phone',      label: 'Telefonnummer' })
   if (!profile?.city?.trim())       missing.push({ field: 'city',       label: 'Wohnort / Stadt' })
+  if (!profile?.address?.trim())    missing.push({ field: 'address',    label: 'Straße & Hausnummer' })
+  if (!profile?.zip_code?.trim())   missing.push({ field: 'zip_code',   label: 'Postleitzahl (PLZ)' })
 
   const hasPosition = String(profile?.position || profile?.current_position || '').trim()
   if (!hasPosition) missing.push({ field: 'position', label: 'Wunschposition / aktueller Job-Titel' })

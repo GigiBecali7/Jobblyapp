@@ -59,6 +59,17 @@ const DESIGNS: { id: CVDesign; label: string; desc: string; proOnly: boolean; ac
 const FONT_FAMILIES: FontFamily[] = ['Inter', 'Georgia', 'Playfair Display', 'Roboto', 'Lato', 'Montserrat']
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+async function fetchImageAsBase64(url: string): Promise<string> {
+  const res = await fetch(url)
+  const blob = await res.blob()
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onloadend = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(blob)
+  })
+}
+
 function serializeExp(entries: ExpEntry[]): string {
   return entries
     .filter(e => e.title || e.company || e.description)
@@ -93,7 +104,9 @@ function initFromProfile(profile: Record<string, unknown> | null): Omit<CVProps,
   return {
     firstName: String(p.first_name || ''), lastName: String(p.last_name || ''),
     email: String(p.email || ''), phone: String(p.phone || ''),
-    city: String(p.city || ''), linkedin: String(p.linkedin || ''),
+    city: String(p.city || ''), address: String(p.address || ''),
+    zipCode: String(p.zip_code || ''), country: String(p.country || 'Österreich'),
+    linkedin: String(p.linkedin || ''),
     photoUrl: String(p.avatar_url || p.photo_url || p.photo || ''), position: String(p.position || ''),
     profile: '', fontFamily: 'Inter', fontSize: 'medium', lineSpacing: 'normal',
   }
@@ -170,7 +183,10 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
   const [expEntries, setExpEntries] = useState<ExpEntry[]>([emptyExp()])
   const [eduEntries, setEduEntries] = useState<EduEntry[]>([emptyEdu()])
   const [langEntries, setLangEntries] = useState<LangEntry[]>([emptyLang()])
-  const [skillTags, setSkillTags] = useState<string[]>([])
+  const [skillTags, setSkillTags] = useState<string[]>(() => {
+    const s = profile?.skills
+    return Array.isArray(s) ? (s as string[]) : []
+  })
   const [skillInput, setSkillInput] = useState('')
   const [profileText, setProfileText] = useState('')
   const [fontFamily, setFontFamily] = useState<FontFamily>('Inter')
@@ -289,7 +305,9 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
     }
     setFields(initFromProfile(profile))
     setExpEntries([emptyExp()]); setEduEntries([emptyEdu()])
-    setLangEntries([emptyLang()]); setSkillTags([]); setSkillInput('')
+    setLangEntries([emptyLang()])
+    setSkillTags(Array.isArray(profile?.skills) ? (profile.skills as string[]) : [])
+    setSkillInput('')
     setProfileText(''); setDesign('NordicMinimal'); setCvName('Mein Lebenslauf')
     setEditingId(null); setErrors({}); setIsDirty(false); setStep(1); setView('build')
   }
@@ -313,6 +331,7 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
     setFields({
       firstName: cv.data.firstName || '', lastName: cv.data.lastName || '',
       email: cv.data.email || '', phone: cv.data.phone || '', city: cv.data.city || '',
+      address: cv.data.address || '', zipCode: cv.data.zipCode || '', country: cv.data.country || 'Österreich',
       linkedin: cv.data.linkedin || '', photoUrl: cv.data.photoUrl || '', position: cv.data.position || '',
       profile: cv.data.profile || '',
       fontFamily: cv.data.fontFamily || 'Inter', fontSize: cv.data.fontSize || 'medium',
@@ -442,7 +461,10 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
           firstName: fields.firstName, lastName: fields.lastName,
           email: fields.email, phone: fields.phone, city: fields.city,
           linkedin: fields.linkedin, position: fields.position,
-          experienceRaw: serializeExp(expEntries),
+          // Send structured entries so AI can generate per-entry descriptions
+          expEntries: expEntries.filter(e => e.title || e.company).map(e => ({
+            title: e.title, company: e.company, period: e.period, userDesc: e.description,
+          })),
           educationRaw: serializeEdu(eduEntries),
           skillsRaw: skillTags.join(', '),
           languagesRaw: serializeLangs(langEntries),
@@ -452,9 +474,24 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
       const json = await res.json()
       if (json.cvData) {
         if (json.cvData.profile) setProfileText(json.cvData.profile)
-        if (json.cvData.skills?.length) setSkillTags(json.cvData.skills)
-        if (json.cvData.experience && !expEntries.some(e => e.description.length > 20)) {
-          setExpEntries(prev => prev.map((e, i) => i === 0 ? { ...e, description: json.cvData.experience } : e))
+        // Only set AI skills if user has none (don't overwrite user's existing skills)
+        if (json.cvData.skills?.length && skillTags.length === 0) setSkillTags(json.cvData.skills)
+        // Apply per-entry descriptions from AI (new format: array of bullet strings)
+        if (Array.isArray(json.cvData.descriptions)) {
+          setExpEntries(prev => prev.map((e, i) => {
+            const aiDesc: string = json.cvData.descriptions[i] || ''
+            // Only apply if the entry had no description or AI provided one
+            if (!aiDesc.trim()) return e
+            // Strip any leaked title|company or date lines
+            const clean = aiDesc.split('\n').filter(l => {
+              const t = l.trim().replace(/^[•\-–*]\s*/, '')
+              if (!t) return false
+              if (t.includes(' | ')) return false
+              if (/^\d{4}\s*[–\-—]\s*(\d{4}|heute|present|aktuell)/i.test(t)) return false
+              return true
+            }).join('\n')
+            return { ...e, description: clean || aiDesc }
+          }))
         }
         trackEvent('StartTrial')
         showToast('KI-Inhalt generiert! ✓')
@@ -528,10 +565,31 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
       const { default: jsPDF }       = await import('jspdf')
       const el = document.getElementById('cv-pdf-capture')
       if (!el) { showToast(t.toastPdfError, false); return }
-      const canvas = await html2canvas(el, { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff' })
+
+      // Pre-convert cross-origin images to base64 so html2canvas can embed them
+      const imgs = Array.from(el.querySelectorAll('img'))
+      const origSrcs: string[] = []
+      for (const img of imgs) {
+        origSrcs.push(img.src)
+        if (img.src && !img.src.startsWith('data:') && !img.src.startsWith('blob:')) {
+          try {
+            img.src = await fetchImageAsBase64(img.src)
+          } catch { /* keep original if fetch fails */ }
+        }
+      }
+      // Wait for all images to finish loading
+      await Promise.all(imgs.map(img => new Promise<void>(resolve => {
+        if (img.complete) { resolve(); return }
+        img.onload = () => resolve(); img.onerror = () => resolve()
+      })))
+
+      const canvas = await html2canvas(el, { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff', allowTaint: true })
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
       pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, pdf.internal.pageSize.getWidth(), pdf.internal.pageSize.getHeight())
       pdf.save(`lebenslauf-${fields.lastName || 'export'}.pdf`)
+
+      // Restore original srcs
+      imgs.forEach((img, i) => { img.src = origSrcs[i] })
     } catch { showToast(t.toastPdfError, false) }
     finally { setExporting(false) }
   }
@@ -782,6 +840,29 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
                         {errors[k] && <div style={{ fontSize: 11, color: C.error, marginTop: 4 }}>{errors[k]}</div>}
                       </div>
                       )})}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14, marginTop: 14 }}>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={labelStyle}>Adresse (Straße & Hausnummer)<span style={{ color: C.error, marginLeft: 2 }}>*</span></label>
+                      <input value={fields.address || ''}
+                        onChange={e => { setFields(p => ({ ...p, address: e.target.value })); markDirty() }}
+                        placeholder="Mariahilfer Straße 100"
+                        style={inStyle} />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>PLZ<span style={{ color: C.error, marginLeft: 2 }}>*</span></label>
+                      <input value={fields.zipCode || ''}
+                        onChange={e => { setFields(p => ({ ...p, zipCode: e.target.value })); markDirty() }}
+                        placeholder="1060"
+                        style={inStyle} />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Land</label>
+                      <input value={fields.country || 'Österreich'}
+                        onChange={e => { setFields(p => ({ ...p, country: e.target.value })); markDirty() }}
+                        placeholder="Österreich"
+                        style={inStyle} />
+                    </div>
                   </div>
                 </Section>
 

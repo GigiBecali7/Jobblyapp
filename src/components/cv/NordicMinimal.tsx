@@ -36,7 +36,7 @@ function DescBullets({ text, fs, ls, color }: { text: string; fs: number; ls: nu
   )
 }
 
-export default function NordicMinimal({ firstName, lastName, email, phone, city, linkedin, photoUrl, position, profile, experience, education, skills, languages, fontFamily = 'Georgia', fontSize = 'medium', lineSpacing = 'normal', sections }: CVProps) {
+export default function NordicMinimal({ firstName, lastName, email, phone, city, address, zipCode, country, linkedin, photoUrl, position, profile, experience, education, skills, languages, fontFamily = 'Georgia', fontSize = 'medium', lineSpacing = 'normal', sections }: CVProps) {
   const fsMap = { small: 11, medium: 13, large: 15 }
   const lsMap = { compact: 1.3, normal: 1.6, relaxed: 1.9 }
   const fs = fsMap[fontSize]
@@ -47,6 +47,7 @@ export default function NordicMinimal({ firstName, lastName, email, phone, city,
 
   const navy = '#1B2E6B'
   const sidebarBg = '#F0F0F0'
+  const locationLine = address && zipCode ? `${address}, ${zipCode} ${city}${country && country !== 'Österreich' ? ', ' + country : ', Österreich'}` : city
 
   return (
     <div style={{ width: 794, height: 1123, backgroundColor: '#FAFAFA', fontFamily, fontSize: fs, lineHeight: ls, display: 'flex', overflow: 'hidden' }}>
@@ -59,8 +60,7 @@ export default function NordicMinimal({ firstName, lastName, email, phone, city,
             : <InitialsAvatar firstName={firstName} lastName={lastName} size={80} />
           }
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e', lineHeight: 1.2, fontFamily: 'Georgia, serif' }}>{firstName}</div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e', lineHeight: 1.2, fontFamily: 'Georgia, serif' }}>{lastName}</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e', lineHeight: 1.2, fontFamily: 'Georgia, serif', whiteSpace: 'nowrap' }}>{firstName} {lastName}</div>
             {position && <div style={{ fontSize: 11, color: navy, marginTop: 5, fontWeight: 500 }}>{position}</div>}
           </div>
         </div>
@@ -69,11 +69,11 @@ export default function NordicMinimal({ firstName, lastName, email, phone, city,
         <div>
           <SectionHead label={sections?.contact ?? DEFAULT_SECTIONS.contact} navy={navy} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {email    && <div style={{ fontSize: 10, color: '#444' }}>{email}</div>}
-            {phone    && <div style={{ fontSize: 10, color: '#444' }}>{phone}</div>}
-            {city     && <div style={{ fontSize: 10, color: '#444' }}>{city}</div>}
-            {linkedin && <div style={{ fontSize: 10, color: '#444', wordBreak: 'break-all' }}>{linkedin}</div>}
-            {!email && !phone && !city && !linkedin && <div style={{ fontSize: 10, color: '#bbb', fontStyle: 'italic' }}>—</div>}
+            {email        && <div style={{ fontSize: 10, color: '#444' }}>{email}</div>}
+            {phone        && <div style={{ fontSize: 10, color: '#444' }}>{phone}</div>}
+            {locationLine && <div style={{ fontSize: 10, color: '#444' }}>{locationLine}</div>}
+            {linkedin     && <div style={{ fontSize: 10, color: '#444', wordBreak: 'break-all' }}>{linkedin}</div>}
+            {!email && !phone && !locationLine && !linkedin && <div style={{ fontSize: 10, color: '#bbb', fontStyle: 'italic' }}>—</div>}
           </div>
         </div>
 

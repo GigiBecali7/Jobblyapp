@@ -12,6 +12,9 @@ export interface UserProfile {
   avatar_url?: string
   phone?: string
   city?: string
+  address?: string
+  zip_code?: string
+  country?: string
   linkedin?: string
   birthday?: string
   industry?: string
