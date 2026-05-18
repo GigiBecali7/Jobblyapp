@@ -83,7 +83,8 @@ Generiere ausschließlich:
 2. Bullet-Points (Beschreibungen) für jede Stelle — NUR die Tätigkeitsbeschreibung
 
 STRIKTE REGELN:
-- KRITISCH: Firmennamen NIEMALS ändern, korrigieren, abkürzen oder ergänzen — exakt buchstabengenau übernehmen
+- KRITISCH: Firmennamen EXAKT verwenden wie angegeben — buchstabengenau, niemals korrigieren oder ändern
+- KRITISCH: Spezifische Firmennamen in dieser Bewerbung: ${expEntries.map(e => `"${e.company}"`).filter(Boolean).join(', ')} — jedes einzeln exakt kopieren
 - KRITISCH: Jobtitel NIEMALS ändern — exakt buchstabengenau übernehmen
 - NIEMALS Zeiträume in Bullet-Points schreiben — sie stehen bereits separat
 - NIEMALS Firmennamen in Bullet-Points nennen — sie stehen bereits separat

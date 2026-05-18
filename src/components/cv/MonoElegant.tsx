@@ -46,8 +46,6 @@ export default function MonoElegant({ firstName, lastName, email, phone, city, a
   const eduEntries = parseEdu(education)
 
   const navy = '#1B2E6B'
-  const locationLine = address && zipCode ? `${address}, ${zipCode} ${city}${country && country !== 'Österreich' ? ', ' + country : ', Österreich'}` : city
-
   return (
     <div style={{ width: 794, height: 1123, backgroundColor: '#fff', fontFamily, fontSize: fs, overflow: 'hidden' }}>
       {/* Top accent bar */}
@@ -59,10 +57,12 @@ export default function MonoElegant({ firstName, lastName, email, phone, city, a
           <div style={{ fontSize: 28, fontWeight: 900, color: '#1a1a1a', lineHeight: 1, letterSpacing: -1, whiteSpace: 'nowrap' }}>{firstName} {lastName}</div>
           {position && <div style={{ fontSize: 13, color: '#888', marginTop: 6, textTransform: 'uppercase', letterSpacing: 2 }}>{position}</div>}
           <div style={{ display: 'flex', gap: 14, marginTop: 10, flexWrap: 'wrap', fontSize: 10, color: '#666' }}>
-            {email        && <span>{email}</span>}
-            {phone        && <span>{phone}</span>}
-            {locationLine && <span>{locationLine}</span>}
-            {linkedin     && <span>{linkedin}</span>}
+            {email             && <span>{email}</span>}
+            {phone             && <span>{phone}</span>}
+            {address           && <span>{address}</span>}
+            {(zipCode || city) && <span>{[zipCode, city].filter(Boolean).join(' ')}</span>}
+            {country           && <span>{country}</span>}
+            {linkedin          && <span>{linkedin}</span>}
           </div>
         </div>
         <div style={{ marginLeft: 24, flexShrink: 0 }}>

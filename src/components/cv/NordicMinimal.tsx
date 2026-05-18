@@ -47,8 +47,6 @@ export default function NordicMinimal({ firstName, lastName, email, phone, city,
 
   const navy = '#1B2E6B'
   const sidebarBg = '#F0F0F0'
-  const locationLine = address && zipCode ? `${address}, ${zipCode} ${city}${country && country !== 'Österreich' ? ', ' + country : ', Österreich'}` : city
-
   return (
     <div style={{ width: 794, height: 1123, backgroundColor: '#FAFAFA', fontFamily, fontSize: fs, lineHeight: ls, display: 'flex', overflow: 'hidden' }}>
       {/* Sidebar */}
@@ -69,11 +67,13 @@ export default function NordicMinimal({ firstName, lastName, email, phone, city,
         <div>
           <SectionHead label={sections?.contact ?? DEFAULT_SECTIONS.contact} navy={navy} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {email        && <div style={{ fontSize: 10, color: '#444' }}>{email}</div>}
-            {phone        && <div style={{ fontSize: 10, color: '#444' }}>{phone}</div>}
-            {locationLine && <div style={{ fontSize: 10, color: '#444' }}>{locationLine}</div>}
-            {linkedin     && <div style={{ fontSize: 10, color: '#444', wordBreak: 'break-all' }}>{linkedin}</div>}
-            {!email && !phone && !locationLine && !linkedin && <div style={{ fontSize: 10, color: '#bbb', fontStyle: 'italic' }}>—</div>}
+            {email              && <div style={{ fontSize: 10, color: '#444' }}>{email}</div>}
+            {phone              && <div style={{ fontSize: 10, color: '#444' }}>{phone}</div>}
+            {address            && <div style={{ fontSize: 10, color: '#444' }}>{address}</div>}
+            {(zipCode || city)  && <div style={{ fontSize: 10, color: '#444' }}>{[zipCode, city].filter(Boolean).join(' ')}</div>}
+            {country            && <div style={{ fontSize: 10, color: '#444' }}>{country}</div>}
+            {linkedin           && <div style={{ fontSize: 10, color: '#444', wordBreak: 'break-all' }}>{linkedin}</div>}
+            {!email && !phone && !address && !zipCode && !city && !country && !linkedin && <div style={{ fontSize: 10, color: '#bbb', fontStyle: 'italic' }}>—</div>}
           </div>
         </div>
 

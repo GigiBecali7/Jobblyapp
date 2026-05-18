@@ -66,8 +66,6 @@ export default function DarkPro({ firstName, lastName, email, phone, city, addre
   const eduEntries = parseEdu(education)
 
   const gold = '#C9A84C'
-  const locationLine = address && zipCode ? `${address}, ${zipCode} ${city}${country && country !== 'Österreich' ? ', ' + country : ', Österreich'}` : city
-
   const langList = languages
     ? languages.split(',').map(l => l.trim()).filter(Boolean)
     : []
@@ -92,11 +90,13 @@ export default function DarkPro({ firstName, lastName, email, phone, city, addre
         <div>
           <SidebarHead label={sections?.contact ?? DEFAULT_SECTIONS.contact} gold={gold} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {email        && <div style={{ fontSize: 10, color: '#bbb' }}>✉ {email}</div>}
-            {phone        && <div style={{ fontSize: 10, color: '#bbb' }}>☎ {phone}</div>}
-            {locationLine && <div style={{ fontSize: 10, color: '#bbb' }}>📍 {locationLine}</div>}
-            {linkedin     && <div style={{ fontSize: 10, color: '#bbb', wordBreak: 'break-all' }}>in {linkedin}</div>}
-            {!email && !phone && !locationLine && !linkedin && <div style={{ fontSize: 10, color: '#555', fontStyle: 'italic' }}>—</div>}
+            {email             && <div style={{ fontSize: 10, color: '#bbb' }}>✉ {email}</div>}
+            {phone             && <div style={{ fontSize: 10, color: '#bbb' }}>☎ {phone}</div>}
+            {address           && <div style={{ fontSize: 10, color: '#bbb' }}>📍 {address}</div>}
+            {(zipCode || city) && <div style={{ fontSize: 10, color: '#bbb', paddingLeft: 14 }}>{[zipCode, city].filter(Boolean).join(' ')}</div>}
+            {country           && <div style={{ fontSize: 10, color: '#bbb', paddingLeft: 14 }}>{country}</div>}
+            {linkedin          && <div style={{ fontSize: 10, color: '#bbb', wordBreak: 'break-all' }}>in {linkedin}</div>}
+            {!email && !phone && !address && !zipCode && !city && !country && !linkedin && <div style={{ fontSize: 10, color: '#555', fontStyle: 'italic' }}>—</div>}
           </div>
         </div>
 

@@ -410,8 +410,7 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
     setPhotoUploading(true)
     try {
       const supabase = createClient()
-      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
-      const path = `${userId}/profile.${ext}`
+      const path = `${userId}/profile.jpg`
       const { data: uploadData, error: uploadErr } = await supabase.storage
         .from('avatars').upload(path, file, { upsert: true, contentType: file.type })
       if (uploadErr) { showToast(`Upload fehlgeschlagen: ${uploadErr.message}`, false); return }
@@ -636,8 +635,8 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
           fields.email,
           fields.phone,
           fields.address,
-          fields.zipCode && fields.city ? `${fields.zipCode} ${fields.city}` : (fields.city || ''),
-          fields.country && fields.country !== 'Österreich' ? fields.country : '',
+          (fields.zipCode || fields.city) ? [fields.zipCode, fields.city].filter(Boolean).join(' ') : '',
+          fields.country,
         ].filter(Boolean).map(s => new Paragraph({ text: s as string })),
         new Paragraph({ text: '' }),
         new Paragraph({ text: sections.profile, heading: HeadingLevel.HEADING_2 }),

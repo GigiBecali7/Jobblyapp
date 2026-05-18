@@ -47,8 +47,20 @@ export async function POST(req: NextRequest) {
       }, { status: 500 })
     }
 
+    // Verify the save was committed
+    let verifiedUrl: string | null = null
+    try {
+      // @ts-ignore
+      const verifyDb = process.env.SUPABASE_SERVICE_ROLE_KEY ? createServiceClient() as any : authClient
+      const { data: verifyRow } = await verifyDb.from('profiles').select('photo_url').eq('id', user.id).single()
+      verifiedUrl = (verifyRow as { photo_url?: string } | null)?.photo_url ?? null
+      console.log(`profile/save-photo verify for user ${user.id}: photo_url=${String(verifiedUrl).slice(0, 60)}`)
+    } catch (verifyErr) {
+      console.warn('profile/save-photo verify failed (non-fatal):', verifyErr)
+    }
+
     console.log(`profile/save-photo ok for user ${user.id}: ${String(photoUrl).slice(0, 60)}`)
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({ ok: true, verifiedUrl })
   } catch (err) {
     console.error('profile/save-photo error:', err)
     return NextResponse.json({ error: 'Interner Fehler.' }, { status: 500 })

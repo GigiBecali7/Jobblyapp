@@ -1714,6 +1714,7 @@ function Block({ title, children }: { title: string; children: React.ReactNode }
 // ── Section: Meine Daten ──────────────────────────────────────────────────────
 function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPhotoUpdate?: (url: string) => void }) {
   const supabase = createClient()
+  const router = useRouter()
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [pwLoading, setPwLoading] = useState(false)
@@ -1778,8 +1779,7 @@ function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPh
     setPhotoPreview(objectUrl)
     setPhotoUploading(true)
     try {
-      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
-      const path = `${profile.id}/profile.${ext}`
+      const path = `${profile.id}/profile.jpg`
       const { data: uploadData, error: uploadErr } = await supabase.storage
         .from('avatars')
         .upload(path, file, { upsert: true, contentType: file.type })
@@ -1805,6 +1805,7 @@ function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPh
       setExistingAvatar(url)
       setPhotoPreview(url)
       if (onPhotoUpdate) onPhotoUpdate(url)
+      router.refresh()
       showPhotoToast('Foto gespeichert ✅')
     } catch (err) {
       console.error('Photo upload exception:', err)
@@ -1823,6 +1824,7 @@ function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPh
       body: JSON.stringify({ photoUrl: null }),
     })
     if (onPhotoUpdate) onPhotoUpdate('')
+    router.refresh()
   }
 
   async function save() {
