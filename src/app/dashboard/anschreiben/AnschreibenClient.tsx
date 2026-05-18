@@ -205,7 +205,7 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
         updated_at: new Date().toISOString(),
       }).eq('id', d.editingId)
       if (!error) setIsDirty(false)
-    } catch { /* silent */ }
+    } catch (err) { console.error('cover_letters auto-save error:', err) }
   }, [])
 
   useEffect(() => {
@@ -285,10 +285,11 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
           return
         }
         const newCount = (existing?.edit_count || 0) + 1
-        await supabase.from('cover_letters').update({
+        const { error: updErr } = await supabase.from('cover_letters').update({
           content: editableText, design: selectedDesign,
           edit_count: newCount, updated_at: new Date().toISOString(),
         }).eq('id', editingId)
+        if (updErr) throw updErr
         setLetters(prev => prev.map(l => l.id === editingId ? { ...l, content: editableText, design: selectedDesign, edit_count: newCount } : l))
         if (!isPro && newCount === MAX_FREE_EDITS) {
           showToast(`Letzte Bearbeitung! Free-Plan erlaubt max. ${MAX_FREE_EDITS}. Upgrade für mehr.`, true)
@@ -297,14 +298,18 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
         }
       } else {
         const { data, error } = await supabase.from('cover_letters').insert({
-          user_id: userId, job_title: jobTitle, company, design: selectedDesign, content: editableText, edit_count: 0,
+          user_id: userId, job_title: jobTitle || '', company: company || '', design: selectedDesign,
+          content: editableText, edit_count: 0,
         }).select().single()
         if (error) throw error
         if (data) { setLetters(prev => [data as CoverLetter, ...prev]); setEditingId((data as CoverLetter).id) }
         showToast('Anschreiben gespeichert ✅')
       }
       setIsDirty(false)
-    } catch { showToast('Fehler beim Speichern. Bitte versuche es erneut.', false) }
+    } catch (err) {
+      console.error('cover_letters save error:', err)
+      showToast('Anschreiben konnte nicht gespeichert werden. Bitte versuche es erneut.', false)
+    }
     finally { setSaving(false) }
   }
 
