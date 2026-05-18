@@ -3,7 +3,6 @@ import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@/lib/supabase/server'
 import { checkAndIncrementAIRate } from '@/lib/rateLimit'
 import { sanitizeText } from '@/lib/sanitize'
-import { validateProfileForAI } from '@/lib/validateProfileForAI'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -18,24 +17,13 @@ export async function POST(request: NextRequest) {
     const company  = sanitizeText(body.company, 200)
     const lang     = sanitizeText(body.lang, 5) || 'de'
 
-    // Validate form inputs first
+    // Only Stelle + Unternehmen are required
     if (!jobTitle || !company) {
       const missing = [
         ...(!jobTitle ? [{ field: 'jobTitle', label: 'Stellenbezeichnung' }] : []),
         ...(!company  ? [{ field: 'company',  label: 'Unternehmen' }] : []),
       ]
       return NextResponse.json({ error: 'Stelle und Unternehmen sind erforderlich.', missing, action: 'fill_form' }, { status: 422 })
-    }
-
-    // Validate profile completeness
-    const validation = await validateProfileForAI(supabase, user.id, user.email ?? '')
-    if (!validation.valid) {
-      console.warn('cover-letter/generate: profile incomplete for user', user.id, validation.missing.map(m => m.label))
-      return NextResponse.json({
-        error: `Für das Anschreiben fehlen noch: ${validation.missing.map(m => m.label).join(', ')}.`,
-        missing: validation.missing,
-        action: 'complete_profile',
-      }, { status: 422 })
     }
 
     const { data: profileRow } = await supabase
@@ -62,6 +50,9 @@ export async function POST(request: NextRequest) {
       ? (rawSkills as string[]).slice(0, 10).join(', ')
       : sanitizeText(String(rawSkills || ''), 500)
 
+    const hasName = firstName || lastName
+    const bewerberName = hasName ? `${firstName} ${lastName}`.trim() : ''
+
     const langMap: Record<string, string> = {
       de: 'Deutsch', en: 'Englisch', tr: 'Türkisch', es: 'Spanisch', fr: 'Französisch', pl: 'Polnisch',
     }
@@ -71,11 +62,11 @@ export async function POST(request: NextRequest) {
 Schreibe auf ${targetLang}.
 
 BEWERBER:
-Name: ${firstName} ${lastName}
-Wohnort: ${city}
-Position / Wunschstelle: ${currentRole}
-Berufserfahrung: ${experience || '–'}
-Kenntnisse: ${skills || '–'}
+${bewerberName ? `Name: ${bewerberName}` : 'Name: (nicht angegeben — schreibe ohne persönliche Nennung)'}
+${city ? `Wohnort: ${city}` : ''}
+${currentRole ? `Position / Wunschstelle: ${currentRole}` : ''}
+Berufserfahrung: ${experience || '(keine Angabe — schreibe auf Basis der Stellenbezeichnung)'}
+Kenntnisse: ${skills || '(keine Angabe)'}
 
 AUSGESCHRIEBENE STELLE:
 Stelle: ${jobTitle}

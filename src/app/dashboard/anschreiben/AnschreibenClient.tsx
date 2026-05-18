@@ -156,8 +156,6 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
   const [toast, setToast]           = useState<{ msg: string; ok: boolean } | null>(null)
   const [errors, setErrors]         = useState<{ job?: string; company?: string }>({})
   const [isDirty, setIsDirty]       = useState(false)
-  const [validModal, setValidModal] = useState<Array<{ field: string; label: string }> | null>(null)
-
   const autoSaveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const autoSaveDataRef  = useRef({ isDirty: false, editingId: null as string | null, editableText: '', selectedDesign: 'NordicMinimal' as CVDesign })
 
@@ -245,8 +243,6 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
       const json = await res.json()
       if (json.coverLetter) {
         setEditableText(json.coverLetter); setView('preview'); trackEvent('StartTrial')
-      } else if (json.action === 'complete_profile' && json.missing) {
-        setValidModal(json.missing as Array<{ field: string; label: string }>)
       } else if (json.action === 'fill_form') {
         showToast(json.error || 'Bitte fülle Stelle und Unternehmen aus.', false)
       } else if (json.action === 'upgrade') {
@@ -380,28 +376,6 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
       {toast && (
         <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 9999, padding: '12px 20px', borderRadius: 10, fontSize: 14, fontWeight: 500, backgroundColor: toast.ok ? '#0D2A1A' : '#2A0D0D', color: toast.ok ? C.success : C.error, border: `1px solid ${toast.ok ? '#2A6B47' : '#6B2A2A'}` }}>
           {toast.msg}
-        </div>
-      )}
-
-      {/* Validation Modal */}
-      {validModal && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', zIndex: 9000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
-          onClick={e => { if (e.target === e.currentTarget) setValidModal(null) }}>
-          <div style={{ backgroundColor: C.card, border: `1px solid rgba(248,113,113,0.3)`, borderRadius: 16, padding: 32, maxWidth: 460, width: '100%' }}>
-            <div style={{ fontSize: 20, fontWeight: 700, color: C.white, marginBottom: 8 }}>Bitte fülle alle Pflichtfelder aus</div>
-            <div style={{ fontSize: 13, color: C.mid, marginBottom: 20 }}>Für das Anschreiben werden folgende Profilangaben benötigt:</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24 }}>
-              {validModal.map((item, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: C.error }}>
-                  <span style={{ fontSize: 10 }}>✕</span> {item.label}
-                </div>
-              ))}
-            </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <a href="/dashboard/meine-daten" style={{ ...btnPrimary(C.navy), textDecoration: 'none', flex: 1, textAlign: 'center', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>Felder ausfüllen →</a>
-              <button onClick={() => setValidModal(null)} style={{ ...btnSecondary, flex: 1 }}>Schließen</button>
-            </div>
-          </div>
         </div>
       )}
 
