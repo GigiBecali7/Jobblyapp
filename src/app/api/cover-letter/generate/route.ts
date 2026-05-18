@@ -84,6 +84,7 @@ STRIKTE REGELN:
 - KEINE Grußformel ("Mit freundlichen Grüßen") — wird separat eingefügt
 - NIEMALS Floskeln: "hiermit bewerbe ich mich", "mit großem Interesse", "ich bin überzeugt", "ich bin begeistert"
 - Jeder Satz muss sich direkt auf "${jobTitle}" bei "${company}" beziehen
+- KRITISCH: Den Unternehmensnamen "${company}" NIEMALS ändern, korrigieren, abkürzen oder ergänzen — verwende ihn buchstabengenau wie angegeben
 - Maximal 220 Wörter
 - Nur den Fließtext (4 Absätze), keine Formatierung, keine Überschriften, keine Aufzählungen`
 
