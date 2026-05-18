@@ -21,32 +21,26 @@ export interface JobResult {
 }
 
 function scoreJob(
-  job: { title: string; description: string },
-  userPosition: string,
-  userIndustry: string,
-  userCity: string,
-  userWorkModel: string,
+  job: { title: string; description: string; location: string },
+  keyword: string,
+  city: string,
 ): number {
-  const haystack = `${job.title} ${job.description}`.toLowerCase()
+  const title = job.title.toLowerCase()
+  const desc  = job.description.toLowerCase()
+  const kw    = keyword.toLowerCase()
+  const loc   = (job.location || '').toLowerCase()
 
-  // Position + industry keywords (high weight)
-  const posWords = userPosition.toLowerCase().split(/\W+/).filter(w => w.length > 2)
-  const indWords = userIndustry.toLowerCase().split(/\W+/).filter(w => w.length > 2)
-  const posHits  = posWords.filter(w => haystack.includes(w)).length
-  const indHits  = indWords.filter(w => haystack.includes(w)).length
+  let score = 30 // base
 
-  // City match (medium weight)
-  const cityHit = userCity && haystack.includes(userCity.toLowerCase()) ? 1 : 0
+  if (kw) {
+    if (title.includes(kw)) score += 50
+    else if (desc.includes(kw)) score += 25
+  }
 
-  // Work model match (medium weight)
-  const workHit = userWorkModel && haystack.includes(userWorkModel.toLowerCase()) ? 1 : 0
+  if (city && loc.includes(city.toLowerCase())) score += 15
+  if (loc.includes('wien') || loc.includes('vienna') || loc.includes('austria') || loc.includes('österreich')) score += 10
 
-  const totalPossible = posWords.length + indWords.length
-  if (totalPossible === 0) return 50 // no profile data — neutral score
-
-  const baseScore = Math.round(((posHits * 2 + indHits) / (totalPossible * 2)) * 70)
-  const bonus = cityHit * 10 + workHit * 8
-  return Math.min(99, Math.max(1, baseScore + bonus))
+  return Math.min(99, score)
 }
 
 function extractSkills(description: string): string[] {
@@ -78,6 +72,7 @@ async function fetchArbeitnow(keyword: string, location: string): Promise<JobRes
   if (keyword) url.searchParams.set('search', keyword)
   if (location) url.searchParams.set('location', normalizeCity(location))
 
+  console.log('Fetching:', url.toString())
   const res = await fetch(url.toString(), {
     headers: { 'Accept': 'application/json', 'User-Agent': 'Jobbly/1.0' },
     signal: AbortSignal.timeout(6000),
@@ -222,8 +217,8 @@ export async function GET(request: NextRequest) {
     jobs = jobs.filter(j => j.type.toLowerCase().includes(workType.toLowerCase()))
   }
 
-  // Calculate match scores using full profile context
-  jobs = jobs.map(j => ({ ...j, matchScore: scoreJob(j, userPosition, userIndustry, userCity, userWorkModel) }))
+  // Calculate match scores against the actual search keyword + city
+  jobs = jobs.map(j => ({ ...j, matchScore: scoreJob(j, effectiveKeyword, effectiveLocation) }))
 
   // Sort by match score descending
   jobs.sort((a, b) => b.matchScore - a.matchScore)

@@ -348,9 +348,9 @@ function Sidebar({ active, onNav, profile, isPro, onUpgrade, onLogout, jobCount,
 
 // ── TopBar ────────────────────────────────────────────────────────────────────
 const MOCK_NOTIFS = [
-  { id: '1', icon: '💼', title: 'Neuer Job Match', desc: 'Product Manager bei TechVision — 92% Match', time: 'Vor 2 Std.', read: false },
-  { id: '2', icon: '👀', title: 'Bewerbung angesehen', desc: 'Digital Solutions AG hat deine Bewerbung geöffnet', time: 'Vor 5 Std.', read: false },
-  { id: '3', icon: '⭐', title: 'Einladung erhalten', desc: 'InnovateX lädt dich zu einem Interview ein', time: 'Vor 1 Tag', read: false },
+  { id: '1', icon: '💼', title: 'Neuer Job Match', desc: 'Passende Stelle in deiner Region gefunden', time: 'Vor 2 Std.', read: false },
+  { id: '2', icon: '👀', title: 'Bewerbung angesehen', desc: 'Ein Unternehmen hat deine Bewerbung geöffnet', time: 'Vor 5 Std.', read: false },
+  { id: '3', icon: '⭐', title: 'Einladung erhalten', desc: 'Du wurdest zu einem Interview eingeladen', time: 'Vor 1 Tag', read: false },
   { id: '4', icon: '🔔', title: 'Jobbly Update', desc: 'Neue KI-Features: Lebenslauf-Builder & mehr', time: 'Vor 3 Tagen', read: true },
 ]
 
@@ -1137,7 +1137,7 @@ function ApplicationsSection({ applications, profile }: { applications: Applicat
             </div>
             <div>
               <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 5 }}>Unternehmen</label>
-              <input value={newComp} onChange={e => setNewComp(e.target.value)} placeholder="z.B. TechVision GmbH" style={inStyle} />
+              <input value={newComp} onChange={e => setNewComp(e.target.value)} placeholder="z.B. Beispiel GmbH" style={inStyle} />
             </div>
           </div>
           <div style={{ marginBottom: 14 }}>
@@ -1646,7 +1646,7 @@ function LetterSection({ profile, isPro, onNeedPro }: { profile: UserProfile; is
         </div>
         <div>
           <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 6, fontWeight: 500 }}>Unternehmen</label>
-          <input value={company} onChange={e => setCompany(e.target.value)} placeholder="z.B. TechVision GmbH"
+          <input value={company} onChange={e => setCompany(e.target.value)} placeholder="z.B. Beispiel GmbH"
             style={{ width: '100%', padding: '10px 14px', borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.04)', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none' }} />
         </div>
       </div>
@@ -2953,8 +2953,9 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
 
   // Fetch real jobs for dashboard home "Top Job Matches" using profile position
   useEffect(() => {
+    if (!profile.desired_position) { setDashJobsLoading(false); return }
     const params = new URLSearchParams()
-    if (profile.desired_position) params.set('q', profile.desired_position)
+    params.set('q', profile.desired_position)
     if (profile.city) params.set('location', profile.city)
     setDashJobsLoading(true)
     fetch(`/api/jobs/search?${params}`).then(r => r.json()).then(data => {
