@@ -78,13 +78,26 @@ const btnDanger: React.CSSProperties = {
   padding: '5px 10px', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit',
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+async function fetchImageAsBase64(url: string): Promise<string> {
+  const res = await fetch(url)
+  const blob = await res.blob()
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onloadend = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(blob)
+  })
+}
+
 // ── Cover Letter A4 Preview ───────────────────────────────────────────────────
 function CoverLetterA4({
-  profile, jobTitle, company, text, design, greeting, closing, subjectPrefix,
+  profile, jobTitle, company, text, design, greeting, closing, subjectPrefix, photoUrl,
 }: {
   profile: Record<string, unknown> | null
   jobTitle: string; company: string; text: string; design: CVDesign
   greeting: string; closing: string; subjectPrefix: string
+  photoUrl?: string
 }) {
   const cfg = DESIGN_CFG[design] || DESIGN_CFG.NordicMinimal
   const p = profile || {}
@@ -108,8 +121,10 @@ function CoverLetterA4({
             {email && <div style={{ fontSize: 12, color: design === 'NordicSidebar' ? '#8B7355' : 'rgba(255,255,255,0.75)', marginTop: 4 }}>{email}</div>}
             {(phone || city) && <div style={{ fontSize: 12, color: design === 'NordicSidebar' ? '#8B7355' : 'rgba(255,255,255,0.6)', marginTop: 2 }}>{[phone, city].filter(Boolean).join(' · ')}</div>}
           </div>
-          <div style={{ width: 50, height: 50, borderRadius: '50%', backgroundColor: design === 'NordicSidebar' ? '#8B7355' : 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700, color: cfg.headerColor, flexShrink: 0 }}>
-            {initials}
+          <div style={{ width: 50, height: 50, borderRadius: '50%', overflow: 'hidden', backgroundColor: design === 'NordicSidebar' ? '#8B7355' : 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700, color: cfg.headerColor, flexShrink: 0 }}>
+            {photoUrl
+              ? <img src={photoUrl} alt="Foto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : initials}
           </div>
         </div>
       </div>
@@ -147,6 +162,8 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
   const [editableText, setEditableText]     = useState('')
   const [selectedDesign, setSelectedDesign] = useState<CVDesign>((lastDesign as CVDesign) || 'NordicMinimal')
   const [editingId, setEditingId] = useState<string | null>(null)
+
+  const [photoUrl] = useState<string>(String(profile?.photo_url || profile?.avatar_url || ''))
 
   const [generating, setGenerating] = useState(false)
   const [saving, setSaving]         = useState(false)
@@ -305,19 +322,56 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
       const { default: jsPDF }       = await import('jspdf')
       const el = document.getElementById('cover-letter-a4-hidden')
       if (!el) { showToast(t.toastPdfError, false); return }
+
+      // Pre-convert cross-origin images to base64 so html2canvas can embed them
+      const imgs = Array.from(el.querySelectorAll('img'))
+      const origSrcs: string[] = []
+      for (const img of imgs) {
+        origSrcs.push(img.src)
+        if (img.src && !img.src.startsWith('data:') && !img.src.startsWith('blob:')) {
+          try { img.src = await fetchImageAsBase64(img.src) } catch { /* keep original */ }
+        }
+      }
+      await Promise.all(imgs.map(img => new Promise<void>(resolve => {
+        if (img.complete) { resolve(); return }
+        img.onload = () => resolve(); img.onerror = () => resolve()
+      })))
+
       const canvas = await html2canvas(el, { scale: 2, useCORS: true, logging: false, backgroundColor: null })
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
       pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, pdf.internal.pageSize.getWidth(), pdf.internal.pageSize.getHeight())
       pdf.save(`anschreiben-${company || 'export'}.pdf`)
+
+      imgs.forEach((img, i) => { img.src = origSrcs[i] })
     } catch { showToast(t.toastPdfError, false) }
     finally { setExporting(false) }
   }
 
   async function handleExportWord() {
     try {
-      const { Document, Packer, Paragraph, TextRun, HeadingLevel } = await import('docx')
+      const { Document, Packer, Paragraph, TextRun, HeadingLevel, ImageRun, AlignmentType } = await import('docx')
       const fn = String(profile?.first_name || ''), ln = String(profile?.last_name || '')
+
+      // Try to embed photo — graceful fallback if fetch/conversion fails
+      const photoChildren: InstanceType<typeof ImageRun>[] = []
+      if (photoUrl) {
+        try {
+          const b64 = await fetchImageAsBase64(photoUrl)
+          const base64Data = b64.split(',')[1]
+          const binaryStr = atob(base64Data)
+          const bytes = new Uint8Array(binaryStr.length)
+          for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i)
+          const mimeType = b64.split(';')[0].split('/')[1] || 'jpeg'
+          const imgType = mimeType === 'png' ? 'png' : mimeType === 'gif' ? 'gif' : 'jpg'
+          // @ts-ignore — docx v9 ImageRun type defs require 'type' only for SVG; safe for raster
+          photoChildren.push(new ImageRun({ data: bytes.buffer as ArrayBuffer, transformation: { width: 60, height: 60 }, type: imgType }))
+        } catch { /* no photo — continue without */ }
+      }
+
       const doc = new Document({ sections: [{ properties: {}, children: [
+        ...(photoChildren.length > 0
+          ? [new Paragraph({ alignment: AlignmentType.RIGHT, children: photoChildren })]
+          : []),
         new Paragraph({ text: `${t.letterSubjectPrefix} ${jobTitle} bei ${company}`, heading: HeadingLevel.HEADING_1 }),
         new Paragraph({ text: '' }),
         new Paragraph({ text: t.letterGreeting }),
@@ -363,7 +417,7 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
   const maxLetters = isPro ? MAX_PRO_LETTERS : MAX_FREE_LETTERS
   const atLimit = letters.length >= maxLetters
 
-  const a4Props = { profile, jobTitle, company, text: editableText, design: selectedDesign, greeting: t.letterGreeting, closing: t.letterClosing, subjectPrefix: t.letterSubjectPrefix }
+  const a4Props = { profile, jobTitle, company, text: editableText, design: selectedDesign, greeting: t.letterGreeting, closing: t.letterClosing, subjectPrefix: t.letterSubjectPrefix, photoUrl: photoUrl || undefined }
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: C.bg, fontFamily: 'DM Sans, Inter, sans-serif', color: C.white }}>
