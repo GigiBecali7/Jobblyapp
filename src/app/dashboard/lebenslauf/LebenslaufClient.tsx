@@ -417,7 +417,10 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
       if (uploadErr) { showToast(`Upload fehlgeschlagen: ${uploadErr.message}`, false); return }
       const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(uploadData!.path)
       const url = `${urlData.publicUrl}?t=${Date.now()}`
-      await supabase.from('profiles').update({ photo_url: url, avatar_url: url } as Record<string, unknown>).eq('id', userId)
+      await fetch('/api/profile/save-photo', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ photoUrl: url }),
+      })
       setFields(p => ({ ...p, photoUrl: url }))
       markDirty()
       showToast('Foto gespeichert ✅')
@@ -629,7 +632,13 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
         new Paragraph({ text: `${fields.firstName} ${fields.lastName}`, heading: HeadingLevel.HEADING_1 }),
         new Paragraph({ children: [new TextRun({ text: fields.position, bold: true })] }),
         new Paragraph({ text: '' }),
-        ...[`${fields.email}`, `${fields.phone}`, `${fields.city}`].filter(Boolean).map(s => new Paragraph({ text: s })),
+        ...[
+          fields.email,
+          fields.phone,
+          fields.address,
+          fields.zipCode && fields.city ? `${fields.zipCode} ${fields.city}` : (fields.city || ''),
+          fields.country && fields.country !== 'Österreich' ? fields.country : '',
+        ].filter(Boolean).map(s => new Paragraph({ text: s as string })),
         new Paragraph({ text: '' }),
         new Paragraph({ text: sections.profile, heading: HeadingLevel.HEADING_2 }),
         new Paragraph({ text: profileText }),

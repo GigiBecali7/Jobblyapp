@@ -20,13 +20,33 @@ export interface JobResult {
   skills: string[]
 }
 
-function scoreJob(job: { title: string; description: string }, userPosition: string, userIndustry: string): number {
-  if (!userPosition && !userIndustry) return 70
+function scoreJob(
+  job: { title: string; description: string },
+  userPosition: string,
+  userIndustry: string,
+  userCity: string,
+  userWorkModel: string,
+): number {
   const haystack = `${job.title} ${job.description}`.toLowerCase()
-  const needles = `${userPosition} ${userIndustry}`.toLowerCase().split(/\W+/).filter(w => w.length > 3)
-  if (needles.length === 0) return 70
-  const hits = needles.filter(n => haystack.includes(n)).length
-  return Math.min(99, 50 + Math.round((hits / needles.length) * 49))
+
+  // Position + industry keywords (high weight)
+  const posWords = userPosition.toLowerCase().split(/\W+/).filter(w => w.length > 2)
+  const indWords = userIndustry.toLowerCase().split(/\W+/).filter(w => w.length > 2)
+  const posHits  = posWords.filter(w => haystack.includes(w)).length
+  const indHits  = indWords.filter(w => haystack.includes(w)).length
+
+  // City match (medium weight)
+  const cityHit = userCity && haystack.includes(userCity.toLowerCase()) ? 1 : 0
+
+  // Work model match (medium weight)
+  const workHit = userWorkModel && haystack.includes(userWorkModel.toLowerCase()) ? 1 : 0
+
+  const totalPossible = posWords.length + indWords.length
+  if (totalPossible === 0) return 50 // no profile data — neutral score
+
+  const baseScore = Math.round(((posHits * 2 + indHits) / (totalPossible * 2)) * 70)
+  const bonus = cityHit * 10 + workHit * 8
+  return Math.min(99, Math.max(1, baseScore + bonus))
 }
 
 function extractSkills(description: string): string[] {
@@ -136,31 +156,41 @@ export async function GET(request: NextRequest) {
   const location = searchParams.get('location') || ''
   const workType = searchParams.get('workType') || ''
 
-  // Fetch user profile for match scoring
-  const { data: profileData } = await supabase.from('profiles').select('position, industry').eq('id', user.id).single()
-  const userPosition = String((profileData as Record<string, unknown> | null)?.position || '')
-  const userIndustry = String((profileData as Record<string, unknown> | null)?.industry || '')
+  // Fetch user profile for default search + match scoring
+  const { data: profileData } = await supabase
+    .from('profiles')
+    .select('desired_position, industry, city, work_model')
+    .eq('id', user.id).single()
+  const p = profileData as Record<string, unknown> | null
+  const userPosition  = String(p?.desired_position || '')
+  const userIndustry  = String(p?.industry || '')
+  const userCity      = String(p?.city || '')
+  const userWorkModel = String(p?.work_model || '')
+
+  // Use profile position as default keyword when none provided
+  const effectiveKeyword  = keyword  || userPosition
+  const effectiveLocation = location || userCity
 
   let jobs: JobResult[] = []
   let source = 'none'
 
   // Try Arbeitnow first
   try {
-    jobs = await fetchArbeitnow(keyword, location)
+    jobs = await fetchArbeitnow(effectiveKeyword, effectiveLocation)
     source = 'arbeitnow'
   } catch (e) {
     console.warn('Arbeitnow failed:', e)
 
     // Try Adzuna
     try {
-      jobs = await fetchAdzuna(keyword, location)
+      jobs = await fetchAdzuna(effectiveKeyword, effectiveLocation)
       source = 'adzuna'
     } catch (e2) {
       console.warn('Adzuna failed:', e2)
 
       // Try Remotive
       try {
-        jobs = await fetchRemotive(keyword || userPosition)
+        jobs = await fetchRemotive(effectiveKeyword)
         source = 'remotive'
       } catch (e3) {
         console.warn('Remotive failed:', e3)
@@ -174,8 +204,8 @@ export async function GET(request: NextRequest) {
     jobs = jobs.filter(j => j.type.toLowerCase().includes(workType.toLowerCase()))
   }
 
-  // Calculate match scores
-  jobs = jobs.map(j => ({ ...j, matchScore: scoreJob(j, userPosition, userIndustry) }))
+  // Calculate match scores using full profile context
+  jobs = jobs.map(j => ({ ...j, matchScore: scoreJob(j, userPosition, userIndustry, userCity, userWorkModel) }))
 
   // Sort by match score descending
   jobs.sort((a, b) => b.matchScore - a.matchScore)

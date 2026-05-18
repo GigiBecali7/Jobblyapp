@@ -843,9 +843,9 @@ function RightSidebar({ applications, profile, onNav, isMobile }: { applications
 }
 
 // ── Section: Jobs finden (live API) ──────────────────────────────────────────
-function JobsSection({ isPro, onSelect, onNeedPro, initialSearch }: { isPro: boolean; onSelect: (j: ReturnType<typeof makeMockJobs>[0]) => void; onNeedPro: () => void; initialSearch?: string }) {
-  const [search, setSearch]     = useState(initialSearch || '')
-  const [location, setLocation] = useState('')
+function JobsSection({ isPro, onSelect, onNeedPro, initialSearch, profile }: { isPro: boolean; onSelect: (j: ReturnType<typeof makeMockJobs>[0]) => void; onNeedPro: () => void; initialSearch?: string; profile?: UserProfile }) {
+  const [search, setSearch]     = useState(initialSearch || profile?.desired_position || '')
+  const [location, setLocation] = useState(profile?.city || '')
   const [workType, setWorkType] = useState('')
   const [jobs, setJobs]         = useState<ReturnType<typeof makeMockJobs>>([])
   const [loading, setLoading]   = useState(false)
@@ -1698,10 +1698,17 @@ function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPh
       }
       const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(uploadData!.path)
       const url = `${urlData.publicUrl}?t=${Date.now()}`
-      const { error: dbErr } = await supabase.from('profiles')
-        .update({ photo_url: url, avatar_url: url } as Record<string, unknown>)
-        .eq('id', profile.id)
-      if (dbErr) console.error('Photo DB save error:', dbErr.message)
+      // Use service-role API route to guarantee DB write bypasses RLS
+      const saveRes = await fetch('/api/profile/save-photo', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ photoUrl: url }),
+      })
+      if (!saveRes.ok) {
+        const saveJson = await saveRes.json().catch(() => ({}))
+        console.error('Photo DB save error:', saveJson)
+        showPhotoToast(`Foto-Speicherung fehlgeschlagen: ${(saveJson as { details?: string }).details || 'DB-Fehler'}`, false)
+        return
+      }
       setExistingAvatar(url)
       setPhotoPreview(url)
       if (onPhotoUpdate) onPhotoUpdate(url)
@@ -2875,9 +2882,12 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
   const [dashJobs, setDashJobs] = useState<ReturnType<typeof makeMockJobs>>([])
   const profileScore = getProfileCompleteness(profile).score
 
-  // Fetch real jobs for dashboard home "Top Job Matches" on mount
+  // Fetch real jobs for dashboard home "Top Job Matches" using profile position
   useEffect(() => {
-    fetch('/api/jobs/search').then(r => r.json()).then(data => {
+    const params = new URLSearchParams()
+    if (profile.desired_position) params.set('q', profile.desired_position)
+    if (profile.city) params.set('location', profile.city)
+    fetch(`/api/jobs/search?${params}`).then(r => r.json()).then(data => {
       if (data.jobs) setDashJobs((data.jobs as RealJob[]).slice(0, 3).map(adaptJob))
     }).catch(() => setDashJobs(mockJobs.slice(0, 3)))
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -2896,7 +2906,7 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
   function renderContent(mob?: boolean) {
     const m = mob ?? isMobile
     switch (activeNav) {
-      case 'jobs': return <JobsSection isPro={isPro} onSelect={j => { trackEvent('ViewContent', { content_name: j.title, content_category: 'Job', content_type: 'product' }); setSelectedJob(j) }} onNeedPro={() => setShowUpgrade(true)} initialSearch={globalSearch} />
+      case 'jobs': return <JobsSection isPro={isPro} onSelect={j => { trackEvent('ViewContent', { content_name: j.title, content_category: 'Job', content_type: 'product' }); setSelectedJob(j) }} onNeedPro={() => setShowUpgrade(true)} initialSearch={globalSearch} profile={profile} />
       case 'applications': return <ApplicationsSection applications={applications} profile={profile} />
       case 'cv': { router.push('/dashboard/lebenslauf'); return null }
       case 'letter': { router.push('/dashboard/anschreiben'); return null }

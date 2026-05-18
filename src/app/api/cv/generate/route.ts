@@ -83,8 +83,8 @@ Generiere ausschließlich:
 2. Bullet-Points (Beschreibungen) für jede Stelle — NUR die Tätigkeitsbeschreibung
 
 STRIKTE REGELN:
-- NIEMALS Firmennamen ändern oder erfinden — verwende sie EXAKT wie angegeben
-- NIEMALS Jobtitel ändern — verwende sie EXAKT wie angegeben
+- KRITISCH: Firmennamen NIEMALS ändern, korrigieren, abkürzen oder ergänzen — exakt buchstabengenau übernehmen
+- KRITISCH: Jobtitel NIEMALS ändern — exakt buchstabengenau übernehmen
 - NIEMALS Zeiträume in Bullet-Points schreiben — sie stehen bereits separat
 - NIEMALS Firmennamen in Bullet-Points nennen — sie stehen bereits separat
 - NIEMALS Jobtitel in Bullet-Points nennen — sie stehen bereits separat
