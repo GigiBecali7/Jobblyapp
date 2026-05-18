@@ -6,6 +6,7 @@ import { DEFAULT_SECTIONS } from '@/components/cv/types'
 import { getDashT, getCurrentLang } from '@/lib/dashboard-i18n'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { trackEvent } from '@/components/MetaPixel'
+import { createClient } from '@/lib/supabase/client'
 
 const NordicMinimal  = dynamic(() => import('@/components/cv/NordicMinimal'),  { ssr: false })
 const NordicSidebar  = dynamic(() => import('@/components/cv/NordicSidebar'),  { ssr: false })
@@ -202,7 +203,9 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
   const [toast, setToast]           = useState<{ msg: string; ok: boolean } | null>(null)
   const [isDirty, setIsDirty]       = useState(false)
   const [validModal, setValidModal] = useState<string[] | null>(null)
+  const [photoUploading, setPhotoUploading] = useState(false)
   const skillInputRef = useRef<HTMLInputElement>(null)
+  const cvPhotoFileRef = useRef<HTMLInputElement>(null)
   const autoSaveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   // Stable ref so handleAutoSave doesn't re-create on every render
   const autoSaveDataRef = useRef({ isDirty: false, editingId: null as string | null, cvName: 'Mein Lebenslauf', design: 'NordicMinimal' as CVDesign, expEntries: [] as ExpEntry[], eduEntries: [] as EduEntry[], langEntries: [] as LangEntry[], skillTags: [] as string[], profileText: '', fields: initFromProfile(profile), fontFamily: 'Inter' as FontFamily, fontSize: 'medium' as FontSize, lineSpacing: 'normal' as LineSpacing })
@@ -397,6 +400,30 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
   }
 
   function removeSkill(s: string) { setSkillTags(prev => prev.filter(x => x !== s)); markDirty() }
+
+  async function handleCVPhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const allowed = ['image/jpeg', 'image/png', 'image/webp']
+    if (!allowed.includes(file.type)) { showToast('Nur JPG, PNG oder WebP erlaubt', false); return }
+    if (file.size > 5 * 1024 * 1024) { showToast('Foto zu groß — max. 5 MB', false); return }
+    setPhotoUploading(true)
+    try {
+      const supabase = createClient()
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+      const path = `${userId}/profile.${ext}`
+      const { data: uploadData, error: uploadErr } = await supabase.storage
+        .from('avatars').upload(path, file, { upsert: true, contentType: file.type })
+      if (uploadErr) { showToast(`Upload fehlgeschlagen: ${uploadErr.message}`, false); return }
+      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(uploadData!.path)
+      const url = `${urlData.publicUrl}?t=${Date.now()}`
+      await supabase.from('profiles').update({ photo_url: url, avatar_url: url } as Record<string, unknown>).eq('id', userId)
+      setFields(p => ({ ...p, photoUrl: url }))
+      markDirty()
+      showToast('Foto gespeichert ✅')
+    } catch { showToast('Upload fehlgeschlagen', false) }
+    finally { setPhotoUploading(false) }
+  }
 
   // ── Experience / Education helpers ──
   function updExp(i: number, k: keyof ExpEntry, v: string) {
@@ -823,12 +850,29 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
 
                 {/* ── Contact info ── */}
                 <Section title="Kontaktdaten">
+                  {/* Photo upload */}
+                  <input ref={cvPhotoFileRef} type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }} onChange={handleCVPhotoChange} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 18 }}>
+                    <div style={{ width: 80, height: 80, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, border: '2px solid rgba(255,255,255,0.15)', background: fields.photoUrl ? 'transparent' : 'linear-gradient(135deg,#1B2E6B,#7C3AED)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, fontWeight: 700, color: '#fff', cursor: 'pointer' }}
+                      onClick={() => cvPhotoFileRef.current?.click()} title="Foto ändern">
+                      {fields.photoUrl
+                        ? <img src={fields.photoUrl} alt="Profilfoto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        : `${(fields.firstName || 'F').charAt(0)}${(fields.lastName || 'N').charAt(0)}`.toUpperCase()}
+                    </div>
+                    <div>
+                      <button onClick={() => cvPhotoFileRef.current?.click()} disabled={photoUploading}
+                        style={{ ...btnSecondary, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {photoUploading ? 'Wird hochgeladen…' : '📷 Foto hochladen'}
+                      </button>
+                      <div style={{ fontSize: 11, color: C.mid, marginTop: 5 }}>JPG, PNG oder WebP · max. 5 MB</div>
+                    </div>
+                  </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14 }}>
                     {([
                       ['firstName', t.firstName], ['lastName', t.lastName],
                       ['email', t.email], ['phone', t.phone],
                       ['city', t.city], ['linkedinUrl', t.linkedinUrl],
-                      ['position', t.position], ['photoUrl', t.photoUrl],
+                      ['position', t.position],
                     ] as [keyof typeof fields, string][]).map(([k, label]) => {
                       const required = ['firstName', 'lastName', 'email', 'phone', 'city', 'position'].includes(k as string)
                       return (
