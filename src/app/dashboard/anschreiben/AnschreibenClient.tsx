@@ -199,12 +199,11 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
     const d = autoSaveDataRef.current
     if (!d.isDirty || !d.editingId) return
     try {
-      const supabase = supabaseRef.current
-      const { error } = await supabase.from('cover_letters').update({
-        content: d.editableText, design: d.selectedDesign,
-        updated_at: new Date().toISOString(),
-      }).eq('id', d.editingId)
-      if (!error) setIsDirty(false)
+      const res = await fetch('/api/cover-letter/save', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: d.editingId, design: d.selectedDesign, content: d.editableText }),
+      })
+      if (res.ok) setIsDirty(false)
     } catch (err) { console.error('cover_letters auto-save error:', err) }
   }, [])
 
@@ -277,32 +276,28 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
   async function handleSave() {
     setSaving(true)
     try {
-      const supabase = supabaseRef.current
+      const res = await fetch('/api/cover-letter/save', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingId || undefined,
+          jobTitle, company, design: selectedDesign, content: editableText,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        showToast(json.error || 'Anschreiben konnte nicht gespeichert werden.', false)
+        return
+      }
+      const { letter, editCount } = json
       if (editingId) {
-        const existing = letters.find(l => l.id === editingId)
-        if (!isPro && existing && existing.edit_count >= MAX_FREE_EDITS) {
-          showToast(`Free-Plan: max. ${MAX_FREE_EDITS} Bearbeitungen. Upgrade zu Pro!`, false)
-          return
-        }
-        const newCount = (existing?.edit_count || 0) + 1
-        const { error: updErr } = await supabase.from('cover_letters').update({
-          content: editableText, design: selectedDesign,
-          edit_count: newCount, updated_at: new Date().toISOString(),
-        }).eq('id', editingId)
-        if (updErr) throw updErr
-        setLetters(prev => prev.map(l => l.id === editingId ? { ...l, content: editableText, design: selectedDesign, edit_count: newCount } : l))
-        if (!isPro && newCount === MAX_FREE_EDITS) {
+        setLetters(prev => prev.map(l => l.id === editingId ? { ...l, content: editableText, design: selectedDesign, edit_count: editCount } : l))
+        if (!isPro && editCount === MAX_FREE_EDITS) {
           showToast(`Letzte Bearbeitung! Free-Plan erlaubt max. ${MAX_FREE_EDITS}. Upgrade für mehr.`, true)
         } else {
           showToast('Anschreiben gespeichert ✅')
         }
       } else {
-        const { data, error } = await supabase.from('cover_letters').insert({
-          user_id: userId, job_title: jobTitle || '', company: company || '', design: selectedDesign,
-          content: editableText, edit_count: 0,
-        }).select().single()
-        if (error) throw error
-        if (data) { setLetters(prev => [data as CoverLetter, ...prev]); setEditingId((data as CoverLetter).id) }
+        if (letter) { setLetters(prev => [letter as CoverLetter, ...prev]); setEditingId((letter as CoverLetter).id) }
         showToast('Anschreiben gespeichert ✅')
       }
       setIsDirty(false)

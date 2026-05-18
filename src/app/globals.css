@@ -35,6 +35,17 @@ body {
   width: 100%;
 }
 
+/* ── SELECT / DROPDOWN — dark background fix ─────────────── */
+/* Prevents white-on-white option text in system dropdown menus */
+select {
+  background-color: #0d0d1a;
+  color: #fff;
+}
+select option {
+  background-color: #0d0d1a;
+  color: #fff;
+}
+
 /* ── COOKIE BANNER ───────────────────────────────────────── */
 .cookie {
   display: flex; align-items: center; justify-content: space-between;
