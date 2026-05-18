@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@/lib/supabase/server'
 import { checkAndIncrementAIRate } from '@/lib/rateLimit'
-import { sanitizeText } from '@/lib/sanitize'
+import { sanitizeText, sanitizeArray } from '@/lib/sanitize'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+
+interface ExpEntryInput { title: string; company: string; period: string; userDesc: string }
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,29 +19,39 @@ export async function POST(request: NextRequest) {
     const isPro = profileRow?.is_pro === true || user.email === 'drthinkbyte@gmail.com'
 
     const body = await request.json()
-    const firstName     = sanitizeText(body.firstName, 100)
-    const lastName      = sanitizeText(body.lastName, 100)
-    const email         = sanitizeText(body.email, 200)
-    const phone         = sanitizeText(body.phone, 50)
-    const city          = sanitizeText(body.city, 100)
-    const linkedin      = sanitizeText(body.linkedin, 300)
-    const position      = sanitizeText(body.position, 200)
-    const experienceRaw = sanitizeText(body.experienceRaw, 5000)
-    const educationRaw  = sanitizeText(body.educationRaw, 3000)
-    const skillsRaw     = sanitizeText(body.skillsRaw, 2000)
-    const languagesRaw  = sanitizeText(body.languagesRaw, 500)
+    const firstName    = sanitizeText(body.firstName, 100)
+    const lastName     = sanitizeText(body.lastName, 100)
+    const email        = sanitizeText(body.email, 200)
+    const phone        = sanitizeText(body.phone, 50)
+    const city         = sanitizeText(body.city, 100)
+    const linkedin     = sanitizeText(body.linkedin, 300)
+    const position     = sanitizeText(body.position, 200)
+    const educationRaw = sanitizeText(body.educationRaw, 3000)
+    const skillsRaw    = sanitizeText(body.skillsRaw, 2000)
+    const languagesRaw = sanitizeText(body.languagesRaw, 500)
+
+    // Structured experience entries (preferred) — fall back to raw text
+    const rawExpEntries: unknown[] = Array.isArray(body.expEntries) ? body.expEntries : []
+    const expEntries: ExpEntryInput[] = rawExpEntries.slice(0, 10).map((e: unknown) => {
+      const entry = e as Record<string, unknown>
+      return {
+        title:    sanitizeText(entry.title,    200),
+        company:  sanitizeText(entry.company,  200),
+        period:   sanitizeText(entry.period,   100),
+        userDesc: sanitizeText(entry.userDesc, 2000),
+      }
+    }).filter(e => e.title || e.company)
 
     // Server-side validation
     const missing: string[] = []
-    if (!firstName || !lastName)              missing.push('Vor- und Nachname')
-    if (!email)                               missing.push('E-Mail-Adresse')
-    if (!phone)                               missing.push('Telefonnummer')
-    if (!city)                               missing.push('Wohnort / Stadt')
-    if (!position)                            missing.push('Wunschposition')
-    if (!experienceRaw && !educationRaw)      missing.push('mindestens eine Berufserfahrung oder Ausbildung')
+    if (!firstName || !lastName)   missing.push('Vor- und Nachname')
+    if (!email)                    missing.push('E-Mail-Adresse')
+    if (!phone)                    missing.push('Telefonnummer')
+    if (!city)                     missing.push('Wohnort / Stadt')
+    if (!position)                 missing.push('Wunschposition')
+    if (expEntries.length === 0 && !educationRaw) missing.push('mindestens eine Berufserfahrung oder Ausbildung')
 
     if (missing.length > 0) {
-      console.warn('cv/generate: validation failed for user', user.id, missing)
       return NextResponse.json({
         error: `Dein Profil ist noch unvollständig. Für einen professionellen Lebenslauf benötigst du: ${missing.join(', ')}.`,
         missing,
@@ -53,43 +65,60 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: rate.message, action: 'upgrade' }, { status: 429 })
     }
 
-    const prompt = `Du bist ein professioneller Karriereberater und CV-Experte für den österreichischen und deutschen Arbeitsmarkt.
+    const expSection = expEntries.length > 0
+      ? expEntries.map((e, i) => `
+Stelle ${i + 1}:
+  Jobtitel (UNVERÄNDERLICH): "${e.title}"
+  Firma (UNVERÄNDERLICH): "${e.company}"
+  Zeitraum (UNVERÄNDERLICH): "${e.period}"
+  Nutzer-Beschreibung: "${e.userDesc || '(keine Angabe — generiere sinnvolle Bullets basierend auf dem Jobtitel)'}"
+`).join('')
+      : '(keine Einträge)'
+
+    const prompt = `Du bist ein professioneller CV-Texter für den österreichischen und deutschen Arbeitsmarkt.
+
+DEINE AUFGABE:
+Generiere ausschließlich:
+1. Eine professionelle Profil-Zusammenfassung (3-4 Sätze)
+2. Bullet-Points (Beschreibungen) für jede Stelle — NUR die Tätigkeitsbeschreibung
+
+STRIKTE REGELN:
+- NIEMALS Firmennamen ändern oder erfinden — verwende sie EXAKT wie angegeben
+- NIEMALS Jobtitel ändern — verwende sie EXAKT wie angegeben
+- NIEMALS Zeiträume in Bullet-Points schreiben — sie stehen bereits separat
+- NIEMALS Firmennamen in Bullet-Points nennen — sie stehen bereits separat
+- NIEMALS Jobtitel in Bullet-Points nennen — sie stehen bereits separat
+- Generiere KEIN Kauderwelsch oder unvollständige Sätze
+- Starte jeden Bullet mit einem deutschen Aktionsverb
 
 KANDIDAT:
 Name: ${firstName} ${lastName}
-E-Mail: ${email}
-Telefon: ${phone}
-Ort: ${city}
-LinkedIn: ${linkedin || '–'}
 Angestrebte Stelle: ${position}
+Ort: ${city}
 
-BERUFSERFAHRUNG (Rohdaten vom Nutzer):
-${experienceRaw || '–'}
+BERUFSERFAHRUNG (UNVERÄNDERLICH):
+${expSection}
 
-AUSBILDUNG (Rohdaten):
-${educationRaw || '–'}
+AUSBILDUNG: ${educationRaw || '–'}
+SPRACHEN: ${languagesRaw || '–'}
+KENNTNISSE: ${skillsRaw || '–'}
 
-KENNTNISSE (Rohdaten):
-${skillsRaw || '–'}
+Antworte NUR als gültiges JSON (kein Markdown, keine Code-Blöcke):
+{
+  "profile": "3-4 Sätze professionelle Zusammenfassung für ${position}",
+  "descriptions": [
+    "• Bullet 1 für Stelle 1\\n• Bullet 2 für Stelle 1\\n• Bullet 3 für Stelle 1",
+    "• Bullet 1 für Stelle 2\\n• Bullet 2 für Stelle 2"
+  ],
+  "skills": ["Skill1", "Skill2", "Skill3"]
+}
 
-SPRACHEN:
-${languagesRaw || '–'}
-
-Erstelle professionellen Lebenslauf-Inhalt. STRENGE REGELN für die Beschreibungen:
-- Jede Beschreibung besteht aus 3-5 Bulletpoints
-- Jeder Bulletpoint startet mit einem starken deutschen Aktionsverb: Entwickelte, Leitete, Optimierte, Implementierte, Koordinierte, Steigerte, Reduzierte, Konzipierte, Etablierte, Verantwortete
-- NIEMALS Firmenname, Job-Titel oder Zeitraum in der Beschreibung wiederholen — diese sind bereits als separate Felder vorhanden
-- Quantifiziere wo möglich: "Steigerte Effizienz um 30%", "Leitete Team von 5 Personen"
-- Kein Passiv, keine Floskeln, keine generischen Phrasen
-- Profile/Zusammenfassung: 3-4 Sätze, spezifisch auf "${position}" zugeschnitten, keine generischen Phrasen
-- Skills: maximal 8-10 relevante Kenntnisse, keine Duplikate
-
-Antworte NUR als gültiges JSON ohne Markdown oder Code-Blöcke:
-{"profile":"3-4 Sätze professionelle Zusammenfassung","experience":"aufbereiteter Erfahrungstext mit Bullets pro Stelle (Format: Bulletpoint pro Zeile, beginnend mit •)","education":"aufbereiteter Ausbildungstext","skills":["Skill1","Skill2","Skill3"],"languages":"Sprachkenntnisse"}`
+WICHTIG: "descriptions" ist ein Array — ein Eintrag pro Stelle, in derselben Reihenfolge wie oben.
+Für jede Stelle: 3-5 Bullet-Points, jeder beginnend mit "• " und einem starken Aktionsverb.`
 
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 1800,
+      max_tokens: 2000,
       messages: [{ role: 'user', content: prompt }],
     })
 

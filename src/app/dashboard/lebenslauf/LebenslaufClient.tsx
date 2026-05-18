@@ -183,7 +183,10 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
   const [expEntries, setExpEntries] = useState<ExpEntry[]>([emptyExp()])
   const [eduEntries, setEduEntries] = useState<EduEntry[]>([emptyEdu()])
   const [langEntries, setLangEntries] = useState<LangEntry[]>([emptyLang()])
-  const [skillTags, setSkillTags] = useState<string[]>([])
+  const [skillTags, setSkillTags] = useState<string[]>(() => {
+    const s = profile?.skills
+    return Array.isArray(s) ? (s as string[]) : []
+  })
   const [skillInput, setSkillInput] = useState('')
   const [profileText, setProfileText] = useState('')
   const [fontFamily, setFontFamily] = useState<FontFamily>('Inter')
@@ -302,7 +305,9 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
     }
     setFields(initFromProfile(profile))
     setExpEntries([emptyExp()]); setEduEntries([emptyEdu()])
-    setLangEntries([emptyLang()]); setSkillTags([]); setSkillInput('')
+    setLangEntries([emptyLang()])
+    setSkillTags(Array.isArray(profile?.skills) ? (profile.skills as string[]) : [])
+    setSkillInput('')
     setProfileText(''); setDesign('NordicMinimal'); setCvName('Mein Lebenslauf')
     setEditingId(null); setErrors({}); setIsDirty(false); setStep(1); setView('build')
   }
@@ -456,7 +461,10 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
           firstName: fields.firstName, lastName: fields.lastName,
           email: fields.email, phone: fields.phone, city: fields.city,
           linkedin: fields.linkedin, position: fields.position,
-          experienceRaw: serializeExp(expEntries),
+          // Send structured entries so AI can generate per-entry descriptions
+          expEntries: expEntries.filter(e => e.title || e.company).map(e => ({
+            title: e.title, company: e.company, period: e.period, userDesc: e.description,
+          })),
           educationRaw: serializeEdu(eduEntries),
           skillsRaw: skillTags.join(', '),
           languagesRaw: serializeLangs(langEntries),
@@ -466,18 +474,24 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
       const json = await res.json()
       if (json.cvData) {
         if (json.cvData.profile) setProfileText(json.cvData.profile)
-        if (json.cvData.skills?.length) setSkillTags(json.cvData.skills)
-        if (json.cvData.experience && !expEntries.some(e => e.description.length > 20)) {
-          // Only keep bullet lines — strip any "Title | Company" or date-range lines the AI may include
-          const rawExp: string = json.cvData.experience
-          const bulletLines = rawExp.split('\n').filter(l => {
-            const t = l.trim()
-            if (!t) return false
-            if (t.includes(' | ') && !t.startsWith('•') && !t.startsWith('-')) return false
-            if (/^\d{4}\s*[–\-—]\s*(\d{4}|heute|present|aktuell)/i.test(t)) return false
-            return true
-          }).join('\n')
-          setExpEntries(prev => prev.map((e, i) => i === 0 ? { ...e, description: bulletLines || rawExp } : e))
+        // Only set AI skills if user has none (don't overwrite user's existing skills)
+        if (json.cvData.skills?.length && skillTags.length === 0) setSkillTags(json.cvData.skills)
+        // Apply per-entry descriptions from AI (new format: array of bullet strings)
+        if (Array.isArray(json.cvData.descriptions)) {
+          setExpEntries(prev => prev.map((e, i) => {
+            const aiDesc: string = json.cvData.descriptions[i] || ''
+            // Only apply if the entry had no description or AI provided one
+            if (!aiDesc.trim()) return e
+            // Strip any leaked title|company or date lines
+            const clean = aiDesc.split('\n').filter(l => {
+              const t = l.trim().replace(/^[•\-–*]\s*/, '')
+              if (!t) return false
+              if (t.includes(' | ')) return false
+              if (/^\d{4}\s*[–\-—]\s*(\d{4}|heute|present|aktuell)/i.test(t)) return false
+              return true
+            }).join('\n')
+            return { ...e, description: clean || aiDesc }
+          }))
         }
         trackEvent('StartTrial')
         showToast('KI-Inhalt generiert! ✓')

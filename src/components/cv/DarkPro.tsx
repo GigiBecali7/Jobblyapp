@@ -127,7 +127,7 @@ export default function DarkPro({ firstName, lastName, email, phone, city, addre
       <div style={{ flex: 1, padding: '32px 26px', display: 'flex', flexDirection: 'column', gap: 18, backgroundColor: '#1E1E1E' }}>
         {/* Name in main area */}
         <div style={{ borderBottom: `1px solid ${gold}`, paddingBottom: 12, marginBottom: 4 }}>
-          <div style={{ fontSize: 26, fontWeight: 800, color: '#fff', lineHeight: 1.1 }}>{firstName} {lastName}</div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: '#fff', lineHeight: 1.1, whiteSpace: 'nowrap' }}>{firstName} {lastName}</div>
           {position && <div style={{ fontSize: 12, color: gold, marginTop: 4 }}>{position}</div>}
         </div>
 

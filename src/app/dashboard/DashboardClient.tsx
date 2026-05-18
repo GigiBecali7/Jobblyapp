@@ -1628,6 +1628,7 @@ function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPh
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
   const [photoUploading, setPhotoUploading] = useState(false)
+  const [photoToast, setPhotoToast] = useState<{ msg: string; ok: boolean } | null>(null)
 
   const p = profile as UserProfile & Record<string, string | number | boolean>
   const [existingAvatar, setExistingAvatar] = useState(String(p.photo_url || p.avatar_url || ''))
@@ -1662,30 +1663,53 @@ function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPh
     }
   }
 
+  function showPhotoToast(msg: string, ok = true) {
+    setPhotoToast({ msg, ok })
+    setTimeout(() => setPhotoToast(null), 3500)
+  }
+
   async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
+
+    // Validate file type and size
+    const allowed = ['image/jpeg', 'image/png', 'image/webp']
+    if (!allowed.includes(file.type)) {
+      showPhotoToast('Nur JPG, PNG oder WebP erlaubt', false); return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showPhotoToast('Foto zu groß — max. 5 MB', false); return
+    }
+
     const objectUrl = URL.createObjectURL(file)
     setPhotoPreview(objectUrl)
     setPhotoUploading(true)
     try {
-      const ext = file.name.split('.').pop() || 'jpg'
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
       const path = `${profile.id}/profile.${ext}`
       const { data: uploadData, error: uploadErr } = await supabase.storage
         .from('avatars')
-        .upload(path, file, { upsert: true })
+        .upload(path, file, { upsert: true, contentType: file.type })
       if (uploadErr) {
         console.error('Photo upload error:', uploadErr.message)
+        showPhotoToast(`Upload fehlgeschlagen: ${uploadErr.message}`, false)
+        setPhotoPreview(existingAvatar || null)
         return
       }
       const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(uploadData!.path)
       const url = `${urlData.publicUrl}?t=${Date.now()}`
-      await supabase.from('profiles').update({ photo_url: url, avatar_url: url } as Record<string, unknown>).eq('id', profile.id)
+      const { error: dbErr } = await supabase.from('profiles')
+        .update({ photo_url: url, avatar_url: url } as Record<string, unknown>)
+        .eq('id', profile.id)
+      if (dbErr) console.error('Photo DB save error:', dbErr.message)
       setExistingAvatar(url)
       setPhotoPreview(url)
       if (onPhotoUpdate) onPhotoUpdate(url)
+      showPhotoToast('Foto gespeichert ✅')
     } catch (err) {
       console.error('Photo upload exception:', err)
+      showPhotoToast('Upload fehlgeschlagen', false)
+      setPhotoPreview(existingAvatar || null)
     } finally {
       setPhotoUploading(false)
     }
@@ -1763,6 +1787,11 @@ function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPh
 
       {/* Toast */}
       {saved && <div className="profile-save-toast">Gespeichert ✓</div>}
+      {photoToast && (
+        <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 9999, padding: '12px 20px', borderRadius: 10, fontSize: 14, fontWeight: 500, backgroundColor: photoToast.ok ? '#0D2A1A' : '#2A0D0D', color: photoToast.ok ? C.success : '#f87171', border: `1px solid ${photoToast.ok ? '#2A6B47' : '#6B2A2A'}` }}>
+          {photoToast.msg}
+        </div>
+      )}
 
       <h2 style={{ fontSize: 22, fontWeight: 700, color: C.white, marginBottom: 24 }}>Meine Daten</h2>
 

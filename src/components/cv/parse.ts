@@ -8,12 +8,13 @@ export function parseExp(raw: string): ExpEntry[] {
     const [title = '', company = ''] = (lines[0] || '').split(' | ').map(s => s.trim())
     const period = lines[1]?.trim() || ''
     const descLines = lines.slice(2).filter(l => {
-      const t = l.trim()
+      const raw = l.trim()
+      if (!raw) return false
+      // Strip bullet prefix, then check for duplicate patterns
+      const t = raw.replace(/^[•\-–*]\s*/, '').trim()
       if (!t) return false
-      // Skip lines that look like "Title | Company" duplicates
-      if (t.includes(' | ') && !t.startsWith('•') && !t.startsWith('-')) return false
-      // Skip lines that look like date ranges (e.g. "2015 – 2020", "2015–2020")
-      if (/^\d{4}\s*[–\-—]\s*(\d{4}|heute|present|aktuell)/i.test(t)) return false
+      if (t.includes(' | ')) return false  // "Title | Company" duplicate (with or without bullet)
+      if (/^\d{4}\s*[–\-—]\s*(\d{4}|heute|present|aktuell)/i.test(t)) return false  // date duplicate
       return true
     })
     const description = descLines.join('\n').trim()
