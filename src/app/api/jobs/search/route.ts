@@ -57,11 +57,26 @@ function extractSkills(description: string): string[] {
   return known.filter(s => desc.includes(s.toLowerCase())).slice(0, 5)
 }
 
-// ── PRIMARY: Arbeitnow API (free, no key needed, EU/DACH focused) ──────────────
+// German/Austrian city names → lowercase English for external APIs
+const CITY_MAP: Record<string, string> = {
+  wien: 'vienna', münchen: 'munich', muenchen: 'munich', köln: 'cologne', koeln: 'cologne',
+  frankfurt: 'frankfurt', hamburg: 'hamburg', berlin: 'berlin', stuttgart: 'stuttgart',
+  düsseldorf: 'dusseldorf', duesseldorf: 'dusseldorf', hannover: 'hannover',
+  nürnberg: 'nuremberg', nuernberg: 'nuremberg', graz: 'graz', salzburg: 'salzburg',
+  innsbruck: 'innsbruck', linz: 'linz', klagenfurt: 'klagenfurt', bregenz: 'bregenz',
+  zürich: 'zurich', zuerich: 'zurich', basel: 'basel', bern: 'bern', genf: 'geneva',
+}
+
+function normalizeCity(city: string): string {
+  const lower = city.toLowerCase().trim()
+  return CITY_MAP[lower] || lower
+}
+
+
 async function fetchArbeitnow(keyword: string, location: string): Promise<JobResult[]> {
   const url = new URL('https://www.arbeitnow.com/api/job-board-api')
   if (keyword) url.searchParams.set('search', keyword)
-  if (location) url.searchParams.set('location', location)
+  if (location) url.searchParams.set('location', normalizeCity(location))
 
   const res = await fetch(url.toString(), {
     headers: { 'Accept': 'application/json', 'User-Agent': 'Jobbly/1.0' },
@@ -94,8 +109,11 @@ async function fetchArbeitnow(keyword: string, location: string): Promise<JobRes
 // ── SECONDARY: Adzuna API (requires API key) ───────────────────────────────────
 async function fetchAdzuna(keyword: string, location: string, country = 'at'): Promise<JobResult[]> {
   if (!ADZUNA_APP_ID || !ADZUNA_APP_KEY) throw new Error('Adzuna keys not set')
-  const q = [keyword, location].filter(Boolean).join(' ')
-  const url = `https://api.adzuna.com/v1/api/jobs/${country}/search/1?app_id=${ADZUNA_APP_ID}&app_key=${ADZUNA_APP_KEY}&results_per_page=20&what=${encodeURIComponent(q)}&content-type=application/json`
+  const base = `https://api.adzuna.com/v1/api/jobs/${country}/search/1?app_id=${ADZUNA_APP_ID}&app_key=${ADZUNA_APP_KEY}&results_per_page=20&content-type=application/json`
+  const params = new URLSearchParams()
+  if (keyword)  params.set('what',  keyword)
+  if (location) params.set('where', normalizeCity(location))
+  const url = `${base}&${params.toString()}`
 
   const res = await fetch(url, { signal: AbortSignal.timeout(6000) })
   if (!res.ok) throw new Error(`Adzuna ${res.status}`)
