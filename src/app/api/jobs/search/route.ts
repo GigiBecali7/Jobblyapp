@@ -76,24 +76,34 @@ function scoreJob(
   const desc  = job.description.toLowerCase()
   const loc   = (job.location || '').toLowerCase()
   const kw    = keyword.toLowerCase().trim()
-  const allTerms = [kw, ...synonyms.map(s => s.toLowerCase())]
 
-  const titleMatch = allTerms.some(t => t && title.includes(t))
-  const descMatch  = allTerms.some(t => t && desc.includes(t))
+  const AUSTRIAN = ['wien', 'vienna', 'graz', 'salzburg', 'linz',
+    'innsbruck', 'österreich', 'austria', 'klagenfurt', 'steyr']
+  const cityNorm = city.toLowerCase()
+
+  // No keyword → show all jobs, score by location only
+  if (!kw) {
+    let score = 30
+    if (cityNorm && loc.includes(cityNorm)) score += 25
+    if (AUSTRIAN.some(a => loc.includes(a))) score += 15
+    if (job.source === 'AMS Austria') score += 10
+    return Math.min(99, score)
+  }
+
+  // Keyword present → filter irrelevant jobs
+  const allTerms = [kw, ...synonyms.map(s => s.toLowerCase())].filter(t => t.length > 0)
+  const titleMatch = allTerms.some(t => title.includes(t))
+  const descMatch  = allTerms.some(t => desc.includes(t))
   if (!titleMatch && !descMatch) return 0
 
   let score = 20
-  if (kw && title.includes(kw))      score += 60
-  else if (titleMatch)                score += 35
-  else if (kw && desc.includes(kw))  score += 20
-  else if (descMatch)                 score += 10
+  if (title.includes(kw))           score += 60
+  else if (titleMatch)               score += 35
+  else if (desc.includes(kw))       score += 20
+  else if (descMatch)                score += 10
 
-  const cityNorm = city.toLowerCase()
   if (cityNorm && loc.includes(cityNorm)) score += 25
-  const AUSTRIAN = ['wien', 'vienna', 'graz', 'salzburg', 'linz',
-    'innsbruck', 'österreich', 'austria', 'klagenfurt', 'steyr']
   if (AUSTRIAN.some(a => loc.includes(a))) score += 15
-
   if (job.source === 'AMS Austria') score += 10
 
   return Math.min(99, score)
@@ -418,7 +428,7 @@ export async function GET(request: NextRequest) {
   // Score with synonyms, filter score=0, sort, cap at 30
   let jobs = allJobs
     .map(j => ({ ...j, matchScore: scoreJob(j, effectiveKeyword, effectiveLocation, synonyms.slice(1)) }))
-    .filter(j => j.matchScore > 0)
+    .filter(j => !effectiveKeyword.trim() || j.matchScore > 0)
     .sort((a, b) => b.matchScore - a.matchScore)
     .slice(0, 30)
 
