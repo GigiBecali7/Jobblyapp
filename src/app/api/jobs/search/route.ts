@@ -19,8 +19,8 @@ export interface JobResult {
 // ── Synonyms ──────────────────────────────────────────────────────────────────
 
 const SYNONYMS: Record<string, string[]> = {
-  'mechaniker':      ['Kfz-Mechaniker', 'Mechatroniker', 'Kfz Mechatroniker', 'Schlosser'],
-  'mechatroniker':   ['Kfz-Mechatroniker', 'Mechaniker', 'Kfz Mechaniker'],
+  'mechaniker':      ['Kfz-Mechaniker', 'Mechatroniker', 'Kfz Mechatroniker', 'Schlosser', 'KFZ'],
+  'mechatroniker':   ['Kfz-Mechatroniker', 'Mechaniker', 'Kfz Mechaniker', 'KFZ'],
   'elektriker':      ['Elektrotechniker', 'Elektroinstallateur', 'Elektroniker'],
   'schlosser':       ['Metallbauer', 'Mechaniker', 'Schweißer'],
   'buchhalter':      ['Buchhaltung', 'Accountant', 'Finanzbuchhaltung', 'Rechnungswesen'],
@@ -63,20 +63,18 @@ const DE_KEYS = ['berlin', 'hamburg', 'münchen', 'munich', 'frankfurt', 'köln'
 const CH_KEYS = ['zürich', 'zurich', 'bern', 'basel', 'genf', 'geneva',
   'schweiz', 'switzerland']
 
-function isAustria(loc: string): boolean  { const l = loc.toLowerCase(); return AT_KEYS.some(k => l.includes(k)) }
-function isGermany(loc: string): boolean  { const l = loc.toLowerCase(); return DE_KEYS.some(k => l.includes(k)) }
+function isAustria(loc: string): boolean     { const l = loc.toLowerCase(); return AT_KEYS.some(k => l.includes(k)) }
+function isGermany(loc: string): boolean     { const l = loc.toLowerCase(); return DE_KEYS.some(k => l.includes(k)) }
 function isSwitzerland(loc: string): boolean { const l = loc.toLowerCase(); return CH_KEYS.some(k => l.includes(k)) }
 
-// Map user location string to the correct Jooble location string
 function mapToJoobleLocation(location: string): string {
-  if (!location) return 'Austria' // Jobbly default
-  if (isAustria(location))     return 'Austria'
+  if (!location)           return 'Austria'
+  if (isAustria(location)) return 'Austria'
   if (isSwitzerland(location)) return 'Switzerland'
-  if (isGermany(location))     return location // pass city name for DE
-  return 'Austria'              // fallback: Austria
+  if (isGermany(location)) return location
+  return 'Austria'
 }
 
-// CITY_MAP: German/Austrian city names → English for Arbeitnow
 const CITY_MAP: Record<string, string> = {
   wien: 'vienna', münchen: 'munich', muenchen: 'munich', köln: 'cologne', koeln: 'cologne',
   frankfurt: 'frankfurt', hamburg: 'hamburg', berlin: 'berlin', stuttgart: 'stuttgart',
@@ -96,7 +94,8 @@ const DACH_TERMS = ['wien', 'vienna', 'graz', 'salzburg', 'linz', 'innsbruck',
   'österreich', 'austria', 'berlin', 'hamburg', 'münchen', 'munich', 'frankfurt',
   'deutschland', 'germany', 'zürich', 'schweiz', 'switzerland']
 
-const US_INDICATORS = ['usa', 'united states', ' us ', 'america', 'remote worldwide']
+// Only hard-block explicit US phrases — 'austria' is safe (no overlap)
+const US_INDICATORS = ['usa', 'united states', ' us,', 'america', 'remote worldwide', 'anywhere in the world']
 
 function scoreJob(
   job: { title: string; description: string; location: string; source: string },
@@ -109,7 +108,7 @@ function scoreJob(
   const loc   = (job.location || '').toLowerCase()
   const kw    = (keyword || '').toLowerCase().trim()
 
-  // Hard filter: US/global jobs that slipped through
+  // Hard filter: explicit US/global jobs
   if (US_INDICATORS.some(u => loc.includes(u))) return 0
 
   let score = 30
@@ -119,7 +118,7 @@ function scoreJob(
     const titleMatch = allTerms.some(t => title.includes(t))
     const descMatch  = allTerms.some(t => desc.includes(t))
 
-    // No relevance to keyword → filter out
+    // Keyword not found anywhere → irrelevant
     if (!titleMatch && !descMatch) return 0
 
     if (title.includes(kw))      score += 60
@@ -128,7 +127,6 @@ function scoreJob(
     else if (descMatch)           score += 10
   }
 
-  // Location bonuses
   const cityNorm = (city || '').toLowerCase()
   if (cityNorm && loc.includes(cityNorm))    score += 25
   if (DACH_TERMS.some(d => loc.includes(d))) score += 15
@@ -159,41 +157,47 @@ function dedup(jobs: JobResult[]): JobResult[] {
   })
 }
 
-// ── API: AMS Austria (no key needed, AT only) ─────────────────────────────────
+// ── API: AMS Austria ──────────────────────────────────────────────────────────
 
 async function fetchAMS(keyword: string, location: string): Promise<JobResult[]> {
-  const params = new URLSearchParams({ page: '1', PERIOD: 'ALL', sortField: '_SCORE' })
+  // Simple call — just keyword + page. Log full response to see actual structure.
+  const params = new URLSearchParams({ page: '1' })
   if (keyword) params.set('query', keyword)
-  params.append('JOB_OFFER_TYPE', 'SB_WKO')
-  params.append('JOB_OFFER_TYPE', 'IJ')
-  params.append('JOB_OFFER_TYPE', 'BA')
-  if (location) {
-    params.set('location', location)
-    if (/^wien$/i.test(location.trim()) || /^vienna$/i.test(location.trim())) {
-      params.set('locationId', 'MUNICIPALITY_90001')
-      params.set('vicinity', '100')
-    }
-  }
+  // Location param: send when given, skip for Austria-wide
+  if (location && location.trim()) params.set('location', location)
 
   const url = `https://jobs.ams.at/public/emps/jobs?${params}`
-  console.log('Fetching AMS:', url)
+  console.log('[AMS] Fetching:', url)
+
   const res = await fetch(url, {
     headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' },
     signal: AbortSignal.timeout(8000),
   })
-  if (!res.ok) throw new Error(`AMS ${res.status}`)
-  const data = await res.json()
-  console.log('AMS raw:', JSON.stringify(data).slice(0, 1000))
+  if (!res.ok) throw new Error(`AMS ${res.status} ${res.statusText}`)
 
-  const raw: unknown[] = data.jobs || data.content || data.items || data.stellenangebote || []
+  const data = await res.json()
+  // Log full response to Vercel logs so we can see the actual field structure
+  console.log('[AMS] Full response:', JSON.stringify(data))
+
+  // Try every known envelope key
+  const raw: unknown[] =
+    data.jobs         ||
+    data.content      ||
+    data.items        ||
+    data.results      ||
+    data.data         ||
+    data.stellenangebote ||
+    (Array.isArray(data) ? data : [])
+
+  console.log('[AMS] Parsed', raw.length, 'jobs from key:', Object.keys(data).join(','))
 
   return raw.slice(0, 20).map((j: unknown) => {
-    const job = j as Record<string, unknown>
-    const employer  = (job.employer  as Record<string, unknown>) || {}
-    const locObj    = (job.location  as Record<string, unknown>) || {}
-    const id = String(job.id || job.jobId || job.refnr || Math.random())
+    const job      = j as Record<string, unknown>
+    const employer = (job.employer  as Record<string, unknown>) || {}
+    const locObj   = (job.location  as Record<string, unknown>) || {}
+    const id       = String(job.id || job.jobId || job.refnr || Math.random())
     return {
-      id: `ams_${id}`,
+      id:          `ams_${id}`,
       title:       String(job.title || job.jobTitle || job.titel || ''),
       company:     String(employer.name || job.company || job.arbeitgeber || ''),
       location:    String(locObj.city || locObj.ort || job.city || job.ort || location || 'Österreich'),
@@ -209,13 +213,12 @@ async function fetchAMS(keyword: string, location: string): Promise<JobResult[]>
   })
 }
 
-// ── API: Jooble (DACH aggregator — karriere.at, StepStone, etc.) ──────────────
+// ── API: Jooble ───────────────────────────────────────────────────────────────
 
-async function fetchJooble(keyword: string, location: string): Promise<JobResult[]> {
+async function fetchJoobleOnce(keyword: string, joobleLocation: string): Promise<JobResult[]> {
   const key = process.env.JOOBLE_API_KEY
-  if (!key) return [] // skip gracefully — no key
+  if (!key) return []
 
-  const joobleLocation = mapToJoobleLocation(location)
   const res = await fetch(`https://jooble.org/api/${key}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -239,6 +242,27 @@ async function fetchJooble(keyword: string, location: string): Promise<JobResult
     matchScore:  0,
     skills:      extractSkills(String(j.snippet || '')),
   }))
+}
+
+// For AT searches: fire two Jooble calls in parallel (city + Austria-wide)
+async function fetchJooble(keyword: string, location: string, atSearch: boolean): Promise<JobResult[]> {
+  if (atSearch && location && mapToJoobleLocation(location) !== location) {
+    // City-specific + Austria-wide in parallel
+    const cityLoc = location  // e.g. "Wien"
+    const [cityRes, atRes] = await Promise.allSettled([
+      fetchJoobleOnce(keyword, cityLoc),
+      fetchJoobleOnce(keyword, 'Austria'),
+    ])
+    const cityJobs = cityRes.status === 'fulfilled' ? cityRes.value : []
+    const atJobs   = atRes.status   === 'fulfilled' ? atRes.value   : []
+    if (cityRes.status === 'rejected') console.warn('[Jooble city] failed:', cityRes.reason)
+    if (atRes.status   === 'rejected') console.warn('[Jooble AT]   failed:', atRes.reason)
+    return [...cityJobs, ...atJobs]
+  }
+
+  // Single call for non-AT or when location is already 'Austria'
+  const joobleLocation = mapToJoobleLocation(location)
+  return fetchJoobleOnce(keyword, joobleLocation)
 }
 
 // ── API: Bundesagentur für Arbeit (DE only) ───────────────────────────────────
@@ -268,7 +292,7 @@ async function fetchBundesagentur(keyword: string, location: string): Promise<Jo
   }))
 }
 
-// ── API: Careerjet (DACH, no key needed) ──────────────────────────────────────
+// ── API: Careerjet ────────────────────────────────────────────────────────────
 
 async function fetchCareerjet(keyword: string, location: string, locale: string): Promise<JobResult[]> {
   const params = new URLSearchParams({
@@ -342,7 +366,6 @@ export async function GET(request: NextRequest) {
   const location = searchParams.get('location') || ''
   const workType = searchParams.get('workType') || ''
 
-  // Fall back to profile when no params given
   const { data: profileData } = await supabase
     .from('profiles').select('desired_position, city').eq('id', user.id).single()
   const p = profileData as Record<string, unknown> | null
@@ -350,63 +373,55 @@ export async function GET(request: NextRequest) {
   const effectiveKeyword  = keyword  || String(p?.desired_position || '')
   const effectiveLocation = location || String(p?.city || '')
 
-  // Synonyms for scoring (not used for extra API calls to reduce latency)
-  const synonyms = expandKeyword(effectiveKeyword).slice(1) // exclude the original kw itself
+  console.log('[Search] params:', { keyword: effectiveKeyword, location: effectiveLocation })
 
-  // Determine region
-  const atSearch = isAustria(effectiveLocation) || (!effectiveLocation && !isGermany(effectiveLocation) && !isSwitzerland(effectiveLocation))
-  const deSearch = isGermany(effectiveLocation)
+  const synonyms  = expandKeyword(effectiveKeyword).slice(1)
+  const atSearch  = isAustria(effectiveLocation) || (!effectiveLocation && !isGermany(effectiveLocation) && !isSwitzerland(effectiveLocation))
+  const deSearch  = isGermany(effectiveLocation)
   const careerjetLocale = deSearch ? 'de_DE' : 'de_AT'
 
-  // AMS: AT only (or no location → default AT)
-  const amsTask = atSearch
-    ? fetchAMS(effectiveKeyword, effectiveLocation)
-    : Promise.resolve([] as JobResult[])
-
-  // Bundesagentur: DE only
-  const baTask = deSearch
-    ? fetchBundesagentur(effectiveKeyword, effectiveLocation)
-    : Promise.resolve([] as JobResult[])
-
-  // Jooble: always, with correct region mapping
-  const joobleTask = fetchJooble(effectiveKeyword, effectiveLocation)
-
-  // Careerjet: always, correct locale
+  const amsTask       = atSearch ? fetchAMS(effectiveKeyword, effectiveLocation) : Promise.resolve([] as JobResult[])
+  const baTask        = deSearch ? fetchBundesagentur(effectiveKeyword, effectiveLocation) : Promise.resolve([] as JobResult[])
+  const joobleTask    = fetchJooble(effectiveKeyword, effectiveLocation, atSearch)
   const careerjetTask = fetchCareerjet(effectiveKeyword, effectiveLocation, careerjetLocale)
-
-  // Arbeitnow: always (covers AT+DE)
   const arbeitnowTask = fetchArbeitnow(effectiveKeyword, effectiveLocation)
 
   const [ams, ba, jooble, careerjet, arbeitnow] = await Promise.allSettled([
     amsTask, baTask, joobleTask, careerjetTask, arbeitnowTask,
   ])
 
-  if (ams.status       === 'rejected') console.warn('AMS failed:',          ams.reason)
-  if (ba.status        === 'rejected') console.warn('Bundesagentur failed:', ba.reason)
-  if (jooble.status    === 'rejected') console.warn('Jooble failed:',        jooble.reason)
-  if (careerjet.status === 'rejected') console.warn('Careerjet failed:',     careerjet.reason)
-  if (arbeitnow.status === 'rejected') console.warn('Arbeitnow failed:',     arbeitnow.reason)
+  const amsJobs       = ams.status       === 'fulfilled' ? ams.value       : []
+  const baJobs        = ba.status        === 'fulfilled' ? ba.value        : []
+  const joobleJobs    = jooble.status    === 'fulfilled' ? jooble.value    : []
+  const careerjetJobs = careerjet.status === 'fulfilled' ? careerjet.value : []
+  const arbeitnowJobs = arbeitnow.status === 'fulfilled' ? arbeitnow.value : []
+
+  if (ams.status       === 'rejected') console.warn('[AMS] failed:',          ams.reason)
+  if (ba.status        === 'rejected') console.warn('[BA] failed:',           ba.reason)
+  if (jooble.status    === 'rejected') console.warn('[Jooble] failed:',       jooble.reason)
+  if (careerjet.status === 'rejected') console.warn('[Careerjet] failed:',    careerjet.reason)
+  if (arbeitnow.status === 'rejected') console.warn('[Arbeitnow] failed:',    arbeitnow.reason)
+
+  console.log('[Search] raw counts — AMS:', amsJobs.length, '| BA:', baJobs.length,
+    '| Jooble:', joobleJobs.length, '| Careerjet:', careerjetJobs.length,
+    '| Arbeitnow:', arbeitnowJobs.length)
 
   const allJobs: JobResult[] = dedup([
-    ...(ams.status       === 'fulfilled' ? ams.value       : []),
-    ...(ba.status        === 'fulfilled' ? ba.value        : []),
-    ...(jooble.status    === 'fulfilled' ? jooble.value    : []),
-    ...(careerjet.status === 'fulfilled' ? careerjet.value : []),
-    ...(arbeitnow.status === 'fulfilled' ? arbeitnow.value : []),
+    ...amsJobs, ...baJobs, ...joobleJobs, ...careerjetJobs, ...arbeitnowJobs,
   ])
 
-  // Score all jobs
   const scored = allJobs.map(j => ({
     ...j,
     matchScore: scoreJob(j, effectiveKeyword, effectiveLocation, synonyms),
   }))
 
-  // Filter: with keyword → drop score=0 (irrelevant); without → keep all DACH (score >= 30)
   const hasKeyword = effectiveKeyword.trim().length > 0
   let jobs = scored
     .filter(j => hasKeyword ? j.matchScore > 0 : j.matchScore >= 30)
     .sort((a, b) => b.matchScore - a.matchScore)
     .slice(0, 30)
+
+  console.log('[Search] after scoring/filter:', jobs.length, 'jobs')
 
   if (workType) {
     jobs = jobs.filter(j => j.type.toLowerCase().includes(workType.toLowerCase()))
