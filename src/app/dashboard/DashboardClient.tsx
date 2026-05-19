@@ -831,7 +831,7 @@ function ProfileCompleteness({ profile, onNav }: { profile: UserProfile; onNav: 
 function RightSidebar({ applications, profile, onNav, isMobile }: { applications: Application[]; profile: UserProfile; onNav: (id: NavId) => void; isMobile?: boolean }) {
   const supabase = createClient()
   const p = profile as UserProfile & Record<string, unknown>
-  const [salary, setSalary] = useState<number>(() => Number(p.salary_target) || 60000)
+  const [salary, setSalary] = useState<number>(() => Number(p.salary_target) || 25000)
   const [editingSalary, setEditingSalary] = useState(false)
   const [salarySaving, setSalarySaving] = useState(false)
   const [salarySaved, setSalarySaved] = useState(false)
@@ -1743,8 +1743,8 @@ function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPh
     industry: String(p.industry || ''),
     position: String(p.position || ''),
     experience: String(p.experience || ''),
-    work_model: String(p.work_model || 'hybrid'),
-    salary_target: Number(p.salary_target) || 55000,
+    work_model: String(p.work_model || 'office'),
+    salary_target: Number(p.salary_target) || 25000,
   })
   const [notifications, setNotifications] = useState({
     job_alerts: Boolean(p.job_alerts ?? true),
