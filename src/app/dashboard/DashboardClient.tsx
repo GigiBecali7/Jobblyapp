@@ -9,6 +9,7 @@ import type { UserProfile, Application } from '@/lib/types'
 import { getProfileCompleteness } from '@/lib/profileCompleteness'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { trackEvent } from '@/components/MetaPixel'
+import UpgradeModalShared from '@/components/UpgradeModal'
 
 interface Props {
   profile: UserProfile
@@ -347,9 +348,9 @@ function Sidebar({ active, onNav, profile, isPro, onUpgrade, onLogout, jobCount,
 
 // ── TopBar ────────────────────────────────────────────────────────────────────
 const MOCK_NOTIFS = [
-  { id: '1', icon: '💼', title: 'Neuer Job Match', desc: 'Product Manager bei TechVision — 92% Match', time: 'Vor 2 Std.', read: false },
-  { id: '2', icon: '👀', title: 'Bewerbung angesehen', desc: 'Digital Solutions AG hat deine Bewerbung geöffnet', time: 'Vor 5 Std.', read: false },
-  { id: '3', icon: '⭐', title: 'Einladung erhalten', desc: 'InnovateX lädt dich zu einem Interview ein', time: 'Vor 1 Tag', read: false },
+  { id: '1', icon: '💼', title: 'Neuer Job Match', desc: 'Passende Stelle in deiner Region gefunden', time: 'Vor 2 Std.', read: false },
+  { id: '2', icon: '👀', title: 'Bewerbung angesehen', desc: 'Ein Unternehmen hat deine Bewerbung geöffnet', time: 'Vor 5 Std.', read: false },
+  { id: '3', icon: '⭐', title: 'Einladung erhalten', desc: 'Du wurdest zu einem Interview eingeladen', time: 'Vor 1 Tag', read: false },
   { id: '4', icon: '🔔', title: 'Jobbly Update', desc: 'Neue KI-Features: Lebenslauf-Builder & mehr', time: 'Vor 3 Tagen', read: true },
 ]
 
@@ -1136,7 +1137,7 @@ function ApplicationsSection({ applications, profile }: { applications: Applicat
             </div>
             <div>
               <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 5 }}>Unternehmen</label>
-              <input value={newComp} onChange={e => setNewComp(e.target.value)} placeholder="z.B. TechVision GmbH" style={inStyle} />
+              <input value={newComp} onChange={e => setNewComp(e.target.value)} placeholder="z.B. Beispiel GmbH" style={inStyle} />
             </div>
           </div>
           <div style={{ marginBottom: 14 }}>
@@ -1645,7 +1646,7 @@ function LetterSection({ profile, isPro, onNeedPro }: { profile: UserProfile; is
         </div>
         <div>
           <label style={{ display: 'block', fontSize: 11, color: C.mid, marginBottom: 6, fontWeight: 500 }}>Unternehmen</label>
-          <input value={company} onChange={e => setCompany(e.target.value)} placeholder="z.B. TechVision GmbH"
+          <input value={company} onChange={e => setCompany(e.target.value)} placeholder="z.B. Beispiel GmbH"
             style={{ width: '100%', padding: '10px 14px', borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.04)', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none' }} />
         </div>
       </div>
@@ -1714,6 +1715,7 @@ function Block({ title, children }: { title: string; children: React.ReactNode }
 // ── Section: Meine Daten ──────────────────────────────────────────────────────
 function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPhotoUpdate?: (url: string) => void }) {
   const supabase = createClient()
+  const router = useRouter()
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [pwLoading, setPwLoading] = useState(false)
@@ -1778,8 +1780,7 @@ function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPh
     setPhotoPreview(objectUrl)
     setPhotoUploading(true)
     try {
-      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
-      const path = `${profile.id}/profile.${ext}`
+      const path = `${profile.id}/profile.jpg`
       const { data: uploadData, error: uploadErr } = await supabase.storage
         .from('avatars')
         .upload(path, file, { upsert: true, contentType: file.type })
@@ -1805,6 +1806,7 @@ function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPh
       setExistingAvatar(url)
       setPhotoPreview(url)
       if (onPhotoUpdate) onPhotoUpdate(url)
+      router.refresh()
       showPhotoToast('Foto gespeichert ✅')
     } catch (err) {
       console.error('Photo upload exception:', err)
@@ -1823,6 +1825,7 @@ function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPh
       body: JSON.stringify({ photoUrl: null }),
     })
     if (onPhotoUpdate) onPhotoUpdate('')
+    router.refresh()
   }
 
   async function save() {
@@ -2603,39 +2606,9 @@ function CoursesSection() {
   )
 }
 
-// ── Upgrade modal ─────────────────────────────────────────────────────────────
-function UpgradeModal({ onClose, onUpgrade }: { onClose: () => void; onUpgrade: () => void }) {
-  const [loading, setLoading] = useState(false)
-  async function handleUpgrade() {
-    setLoading(true)
-    trackEvent('InitiateCheckout', { value: 9.99, currency: 'EUR' })
-    try {
-      const res = await fetch('/api/stripe/checkout', { method: 'POST' })
-      const data = await res.json()
-      if (data.url) window.location.href = data.url
-    } finally { setLoading(false) }
-  }
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300, padding: 20, backdropFilter: 'blur(4px)' }}
-      onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{ background: C.card, borderRadius: 16, border: `0.5px solid rgba(255,255,255,0.1)`, width: '100%', maxWidth: 420, padding: 32 }}>
-        <button onClick={onClose} style={{ float: 'right', background: 'rgba(255,255,255,0.06)', border: `0.5px solid ${C.border}`, borderRadius: '50%', width: 30, height: 30, cursor: 'pointer', color: C.mid, fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
-        <div style={{ textAlign: 'center', marginBottom: 24 }}>
-          <div style={{ fontSize: 40, marginBottom: 10 }}>👑</div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: C.white, marginBottom: 4 }}>Jobbly Premium</div>
-          <div style={{ fontSize: 30, fontWeight: 700, color: C.white }}>€9.99<span style={{ fontSize: 15, color: C.mid, fontWeight: 400 }}>/Monat</span></div>
-          <div style={{ fontSize: 11, color: C.mid, marginTop: 4 }}>Jederzeit kündbar · Keine versteckten Kosten</div>
-        </div>
-        {['⚡ 1-Klick Bewerbung — KI bewirbt sich für dich', '🔔 Sofort-Alarm bei Traumjobs', '🤖 Eigener KI-Assistent 24/7', '📋 Unbegrenzte Bewerbungen', '🎨 Exklusive CV-Designs mit Foto'].map(f => (
-          <div key={f} style={{ display: 'flex', gap: 10, padding: '8px 0', fontSize: 13, color: 'rgba(255,255,255,0.75)', borderBottom: `0.5px solid ${C.border}` }}>{f}</div>
-        ))}
-        <button onClick={handleUpgrade} disabled={loading} style={{ width: '100%', marginTop: 20, padding: 14, borderRadius: 10, background: `linear-gradient(135deg, ${C.purple}, ${C.purple2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 15, fontWeight: 700 }}>
-          {loading ? 'Weiterleitung…' : 'Jetzt upgraden · €9.99/Monat →'}
-        </button>
-        <p style={{ fontSize: 11, color: C.mid, textAlign: 'center', marginTop: 10 }}>14-Tage Geld-zurück-Garantie · Gesichert durch Stripe</p>
-      </div>
-    </div>
-  )
+// UpgradeModal — delegates to the shared component
+function UpgradeModal({ feature, onClose }: { feature: string; onClose: () => void }) {
+  return <UpgradeModalShared feature={feature} onClose={onClose} />
 }
 
 // ── Application Modal (4-step) ────────────────────────────────────────────────
@@ -2945,6 +2918,7 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
   const [selectedJob, setSelectedJob] = useState<DashJob | null>(null)
   const [applyJob, setApplyJob] = useState<DashJob | null>(null)
   const [showUpgrade, setShowUpgrade] = useState(false)
+  const [upgradeModal, setUpgradeModal] = useState<string | null>(null)
   const [globalSearch, setGlobalSearch] = useState('')
   const [globalToast, setGlobalToast] = useState<string>('')
   const p0 = profile as UserProfile & Record<string, unknown>
@@ -2979,8 +2953,9 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
 
   // Fetch real jobs for dashboard home "Top Job Matches" using profile position
   useEffect(() => {
+    if (!profile.desired_position) { setDashJobsLoading(false); return }
     const params = new URLSearchParams()
-    if (profile.desired_position) params.set('q', profile.desired_position)
+    params.set('q', profile.desired_position)
     if (profile.city) params.set('location', profile.city)
     setDashJobsLoading(true)
     fetch(`/api/jobs/search?${params}`).then(r => r.json()).then(data => {
@@ -3003,7 +2978,7 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
   function renderContent(mob?: boolean) {
     const m = mob ?? isMobile
     switch (activeNav) {
-      case 'jobs': return <JobsSection isPro={isPro} onSelect={j => { trackEvent('ViewContent', { content_name: j.title, content_category: 'Job', content_type: 'product' }); setSelectedJob(j) }} onNeedPro={() => setShowUpgrade(true)} initialSearch={globalSearch} profile={profile} />
+      case 'jobs': return <JobsSection isPro={isPro} onSelect={j => { trackEvent('ViewContent', { content_name: j.title, content_category: 'Job', content_type: 'product' }); setSelectedJob(j) }} onNeedPro={() => setUpgradeModal('1-Klick Bewerbung')} initialSearch={globalSearch} profile={profile} />
       case 'applications': return <ApplicationsSection applications={applications} profile={profile} />
       case 'cv': { router.push('/dashboard/lebenslauf'); return null }
       case 'letter': { router.push('/dashboard/anschreiben'); return null }
@@ -3111,11 +3086,11 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
               dashJobs.slice(0, 3).map(job => (
                 <div key={job.id} style={{ position: 'relative' }}>
                   <JobCard job={job} onClick={() => {
-                    if (!isPro) { setShowUpgrade(true); return }
+                    if (!isPro) { setUpgradeModal('1-Klick Bewerbung'); return }
                     setSelectedJob(job)
                   }} />
                   <button
-                    onClick={e => { e.stopPropagation(); setApplyJob(job) }}
+                    onClick={e => { e.stopPropagation(); if (!isPro) { setUpgradeModal('1-Klick Bewerbung'); return } setApplyJob(job) }}
                     style={{ position: 'absolute', bottom: 10, right: 12, padding: '5px 12px', borderRadius: 7, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600, zIndex: 1 }}>
                     Bewerben →
                   </button>
@@ -3144,7 +3119,8 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
     <>
       {selectedJob && <JobDetailModal job={selectedJob} profile={profile} onClose={() => setSelectedJob(null)} />}
       {applyJob && <ApplicationModal job={applyJob} profile={profile} isPro={isPro} applicationsCount={applications.length} onClose={() => setApplyJob(null)} onSuccess={() => { setApplyJob(null); router.refresh() }} />}
-      {showUpgrade && <UpgradeModal onClose={() => setShowUpgrade(false)} onUpgrade={() => setShowUpgrade(false)} />}
+      {upgradeModal && <UpgradeModal feature={upgradeModal} onClose={() => setUpgradeModal(null)} />}
+      {showUpgrade && <UpgradeModal feature="Jobbly Premium" onClose={() => setShowUpgrade(false)} />}
       {globalToast && (
         <div className="profile-save-toast" style={{ background: upgradeStatus === 'success' ? '#0D2A1A' : '#1a1a2e', color: upgradeStatus === 'success' ? '#4ade80' : '#8892A4', borderColor: upgradeStatus === 'success' ? '#2A6B47' : 'rgba(255,255,255,0.1)', fontSize: 14, maxWidth: 420, textAlign: 'center' }}>
           {globalToast}

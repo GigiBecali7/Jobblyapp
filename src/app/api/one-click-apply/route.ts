@@ -24,6 +24,7 @@ export async function POST(request: NextRequest) {
 
     const prompt = `You are a professional application writer. Write in ${writeLang}.
 RULE: No flattery, no hollow phrases. Genuine, direct, on equal footing.
+CRITICAL: Company name "${jobCompany}" must be used EXACTLY as written. Letter by letter. Never correct, abbreviate, or modify.
 PERSON: ${userData.fullname}, ${userData.city || ''}
 POSITION APPLYING TO: "${jobTitle}" at "${jobCompany}"
 ${jobDescription ? `JOB DESCRIPTION:\n${jobDescription.slice(0, 800)}` : ''}

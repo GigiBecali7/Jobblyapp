@@ -48,8 +48,6 @@ export default function ModernSplit({ firstName, lastName, email, phone, city, a
   const accent   = '#7B78CC'
   const lavender = '#B8B5E8'
   const dark     = '#2D2D2D'
-  const locationLine = address && zipCode ? `${address}, ${zipCode} ${city}${country && country !== 'Österreich' ? ', ' + country : ', Österreich'}` : city
-
   return (
     <div style={{ width: 794, height: 1123, backgroundColor: '#fff', fontFamily, fontSize: fs, lineHeight: ls, overflow: 'hidden', position: 'relative' }}>
       {/* Decorative circles */}
@@ -66,10 +64,12 @@ export default function ModernSplit({ firstName, lastName, email, phone, city, a
           <div style={{ fontSize: 26, fontWeight: 800, color: dark, lineHeight: 1.1, whiteSpace: 'nowrap' }}>{firstName} {lastName}</div>
           {position && <div style={{ fontSize: 13, color: accent, marginTop: 4, fontWeight: 500 }}>{position}</div>}
           <div style={{ display: 'flex', gap: 14, marginTop: 6, flexWrap: 'wrap', fontSize: 10, color: '#666' }}>
-            {email        && <span>{email}</span>}
-            {phone        && <span>{phone}</span>}
-            {locationLine && <span>{locationLine}</span>}
-            {linkedin     && <span>{linkedin}</span>}
+            {email             && <span>{email}</span>}
+            {phone             && <span>{phone}</span>}
+            {address           && <span>{address}</span>}
+            {(zipCode || city) && <span>{[zipCode, city].filter(Boolean).join(' ')}</span>}
+            {country           && <span>{country}</span>}
+            {linkedin          && <span>{linkedin}</span>}
           </div>
         </div>
       </div>

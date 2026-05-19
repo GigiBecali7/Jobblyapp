@@ -58,8 +58,6 @@ export default function NordicSidebar({ firstName, lastName, email, phone, city,
   const dark    = '#3D2B1F'
   const body    = '#5C4033'
   const divider = '#C4AA8E'
-  const locationLine = address && zipCode ? `${address}, ${zipCode} ${city}${country && country !== 'Österreich' ? ', ' + country : ', Österreich'}` : city
-
   return (
     <div style={{ width: 794, height: 1123, display: 'flex', fontFamily, fontSize: fs, lineHeight: ls, backgroundColor: '#fff', overflow: 'hidden' }}>
       {/* Sidebar */}
@@ -80,11 +78,13 @@ export default function NordicSidebar({ firstName, lastName, email, phone, city,
         <div>
           <SidebarHead label={sections?.contact ?? DEFAULT_SECTIONS.contact} accent={accent} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {email        && <div style={{ fontSize: 10, color: body }}>✉ {email}</div>}
-            {phone        && <div style={{ fontSize: 10, color: body }}>☎ {phone}</div>}
-            {locationLine && <div style={{ fontSize: 10, color: body }}>📍 {locationLine}</div>}
-            {linkedin     && <div style={{ fontSize: 10, color: body, wordBreak: 'break-all' }}>in {linkedin}</div>}
-            {!email && !phone && !locationLine && !linkedin && <div style={{ fontSize: 10, color: '#bbb', fontStyle: 'italic' }}>—</div>}
+            {email             && <div style={{ fontSize: 10, color: body }}>✉ {email}</div>}
+            {phone             && <div style={{ fontSize: 10, color: body }}>☎ {phone}</div>}
+            {address           && <div style={{ fontSize: 10, color: body }}>📍 {address}</div>}
+            {(zipCode || city) && <div style={{ fontSize: 10, color: body, paddingLeft: 14 }}>{[zipCode, city].filter(Boolean).join(' ')}</div>}
+            {country           && <div style={{ fontSize: 10, color: body, paddingLeft: 14 }}>{country}</div>}
+            {linkedin          && <div style={{ fontSize: 10, color: body, wordBreak: 'break-all' }}>in {linkedin}</div>}
+            {!email && !phone && !address && !zipCode && !city && !country && !linkedin && <div style={{ fontSize: 10, color: '#bbb', fontStyle: 'italic' }}>—</div>}
           </div>
         </div>
 

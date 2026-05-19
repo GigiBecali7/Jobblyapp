@@ -17,6 +17,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const body = await request.json().catch(() => ({}))
+    const billingPeriod: 'monthly' | 'yearly' = body.billingPeriod === 'yearly' ? 'yearly' : 'monthly'
+    const priceId = billingPeriod === 'yearly'
+      ? (process.env.STRIPE_PRICE_ID_YEARLY || process.env.STRIPE_PRICE_ID)
+      : process.env.STRIPE_PRICE_ID
+
     const { data: profile } = await supabase
       .from('profiles')
       .select('stripe_customer_id, email, first_name, last_name')
@@ -44,7 +50,7 @@ export async function POST(request: NextRequest) {
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       payment_method_types: ['card'],
-      line_items: [{ price: process.env.STRIPE_PRICE_ID, quantity: 1 }],
+      line_items: [{ price: priceId, quantity: 1 }],
       mode: 'subscription',
       success_url: `${appUrl}/dashboard?success=1`,
       cancel_url: `${appUrl}/?canceled=1`,
