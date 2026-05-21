@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
-const MAX_FREE_CVS = 1
+const MAX_FREE_CVS = 3
 const MAX_PRO_CVS = 5
 const MAX_FREE_EDITS = 5
 

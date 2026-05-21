@@ -30,7 +30,7 @@ type NavId = 'dashboard' | 'jobs' | 'applications' | 'cv' | 'letter' | 'profile'
 
 const NAV: { id: NavId; icon: string; label: string; badge?: string }[] = [
   { id: 'dashboard',    icon: '⊞',  label: 'Dashboard' },
-  { id: 'jobs',         icon: '🔍', label: 'Jobs finden' },
+  { id: 'jobs',         icon: '🔍', label: 'Jobs finden', badge: 'Bald' },
   { id: 'applications', icon: '📋', label: 'Bewerbungen' },
   { id: 'cv',           icon: '📄', label: 'Lebenslauf' },
   { id: 'letter',       icon: '✉️', label: 'Anschreiben' },
@@ -831,7 +831,7 @@ function ProfileCompleteness({ profile, onNav }: { profile: UserProfile; onNav: 
 function RightSidebar({ applications, profile, onNav, isMobile }: { applications: Application[]; profile: UserProfile; onNav: (id: NavId) => void; isMobile?: boolean }) {
   const supabase = createClient()
   const p = profile as UserProfile & Record<string, unknown>
-  const [salary, setSalary] = useState<number>(() => Number(p.salary_target) || 60000)
+  const [salary, setSalary] = useState<number>(() => Number(p.salary_target) || 25000)
   const [editingSalary, setEditingSalary] = useState(false)
   const [salarySaving, setSalarySaving] = useState(false)
   const [salarySaved, setSalarySaved] = useState(false)
@@ -1029,6 +1029,38 @@ function JobsSection({ isPro, onSelect, onNeedPro, initialSearch, profile }: { i
       {!loading && !apiError && filtered.map(job => (
         <JobCard key={job.id} job={job} onClick={() => { if (!isPro) { onNeedPro(); return }; onSelect(job) }} />
       ))}
+    </div>
+  )
+}
+
+// ── Section: Jobs Coming Soon ─────────────────────────────────────────────────
+function JobsComingSoonSection({ profile }: { profile: UserProfile }) {
+  const supabase = createClient()
+  const [alerts, setAlerts] = useState<boolean>(Boolean((profile as UserProfile & Record<string, unknown>).job_alerts ?? true))
+
+  async function toggleAlerts() {
+    const next = !alerts
+    setAlerts(next)
+    await supabase.from('profiles').update({ job_alerts: next } as Record<string, unknown>).eq('id', profile.id)
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 420, padding: '48px 24px', textAlign: 'center' }}>
+      <div style={{ fontSize: 56, marginBottom: 20 }}>💼</div>
+      <div style={{ fontSize: 11, fontWeight: 700, color: C.navy3, textTransform: 'uppercase' as const, letterSpacing: '0.12em', marginBottom: 12 }}>Demnächst verfügbar</div>
+      <h2 style={{ fontSize: 26, fontWeight: 700, color: C.white, marginBottom: 12, letterSpacing: '-0.4px' }}>Jobsuche kommt bald!</h2>
+      <p style={{ fontSize: 14, color: C.mid, lineHeight: 1.6, maxWidth: 380, marginBottom: 32 }}>
+        Wir arbeiten daran, dir die besten Jobs aus dem DACH-Raum direkt hier zu zeigen. Lass dich benachrichtigen, sobald es losgeht.
+      </p>
+      <button
+        onClick={toggleAlerts}
+        style={{ padding: '13px 28px', borderRadius: 12, background: alerts ? 'rgba(27,46,107,0.35)' : `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: alerts ? C.navy3 : C.white, border: alerts ? `0.5px solid rgba(147,175,253,0.3)` : 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 700, transition: 'all .2s' }}
+      >
+        {alerts ? '🔔 Du wirst benachrichtigt' : '🔔 Benachrichtige mich'}
+      </button>
+      {alerts && (
+        <p style={{ fontSize: 12, color: C.mid, marginTop: 12 }}>Wir schreiben dir, sobald die Jobsuche live ist.</p>
+      )}
     </div>
   )
 }
@@ -1743,8 +1775,8 @@ function ProfileSection({ profile, onPhotoUpdate }: { profile: UserProfile; onPh
     industry: String(p.industry || ''),
     position: String(p.position || ''),
     experience: String(p.experience || ''),
-    work_model: String(p.work_model || 'hybrid'),
-    salary_target: Number(p.salary_target) || 55000,
+    work_model: String(p.work_model || 'office'),
+    salary_target: Number(p.salary_target) || 25000,
   })
   const [notifications, setNotifications] = useState({
     job_alerts: Boolean(p.job_alerts ?? true),
@@ -2928,6 +2960,7 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
   const isPro = !!profile.is_pro
   const isMobile = useIsMobile()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [quickApplyUrl, setQuickApplyUrl] = useState('')
 
   // Show upgrade/cancel toast from URL param (once)
   useEffect(() => {
@@ -2978,7 +3011,7 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
   function renderContent(mob?: boolean) {
     const m = mob ?? isMobile
     switch (activeNav) {
-      case 'jobs': return <JobsSection isPro={isPro} onSelect={j => { trackEvent('ViewContent', { content_name: j.title, content_category: 'Job', content_type: 'product' }); setSelectedJob(j) }} onNeedPro={() => setUpgradeModal('1-Klick Bewerbung')} initialSearch={globalSearch} profile={profile} />
+      case 'jobs': return <JobsComingSoonSection profile={profile} />
       case 'applications': return <ApplicationsSection applications={applications} profile={profile} />
       case 'cv': { router.push('/dashboard/lebenslauf'); return null }
       case 'letter': { router.push('/dashboard/anschreiben'); return null }
@@ -3034,6 +3067,35 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
             <StatCard icon="📊" value={`${profileScore}%`} label="Profil Match" sub={profileScore >= 80 ? 'Sehr gut' : profileScore >= 50 ? 'Ausbaufähig' : 'Unvollständig'} subColor={profileScore >= 80 ? C.success : C.amber} onClick={() => setActiveNav('profile')} />
             <StatCard icon="📋" value={String(applications.length)} label="Bewerbungen" sub="Insgesamt" subColor={C.mid} onClick={() => setActiveNav('applications')} />
             <StatCard icon="⭐" value={String(applications.filter(a => ((a as unknown as Record<string, unknown>).status as string) === 'Interview').length)} label="Einladungen" sub="Letzte 30 Tage" subColor={C.mid} onClick={() => setActiveNav('applications')} />
+          </div>
+
+          {/* ── Schnell bewerben widget ── */}
+          <div style={{ marginBottom: 20, padding: '16px 18px', borderRadius: 12, border: `0.5px solid rgba(27,46,107,0.35)`, background: 'rgba(27,46,107,0.1)' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.white, marginBottom: 2 }}>🚀 Schnell bewerben</div>
+            <div style={{ fontSize: 12, color: C.mid, marginBottom: 12 }}>Job-Link einfügen und sofort Anschreiben generieren</div>
+            <div style={{ display: 'flex', gap: 10, flexDirection: m ? 'column' : 'row' }}>
+              <input
+                value={quickApplyUrl}
+                onChange={e => setQuickApplyUrl(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key !== 'Enter' || !quickApplyUrl.trim()) return
+                  if (!isPro) { setUpgradeModal('1-Klick Bewerbung'); return }
+                  router.push(`/dashboard/anschreiben?url=${encodeURIComponent(quickApplyUrl.trim())}`)
+                }}
+                placeholder="Link einfügen… (karriere.at, willhaben, StepStone)"
+                style={{ flex: 1, padding: '10px 14px', minHeight: 44, borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.04)', color: C.white, fontFamily: 'inherit', fontSize: m ? 16 : 13, outline: 'none' }}
+              />
+              <button
+                onClick={() => {
+                  if (!quickApplyUrl.trim()) return
+                  if (!isPro) { setUpgradeModal('1-Klick Bewerbung'); return }
+                  router.push(`/dashboard/anschreiben?url=${encodeURIComponent(quickApplyUrl.trim())}`)
+                }}
+                style={{ padding: '10px 20px', minHeight: 44, borderRadius: 9, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}
+              >
+                Los →
+              </button>
+            </div>
           </div>
 
           {/* ── Mobile quick actions ── */}

@@ -155,7 +155,7 @@ const btnDanger: React.CSSProperties = {
 
 const MAX_FREE_EDITS = 5
 const MAX_PRO_CVS = 5
-const MAX_FREE_CVS = 1
+const MAX_FREE_CVS = 3
 
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function LebenslaufClient({ isPro, existingCVCount, profile, userId }: Props) {
@@ -590,7 +590,7 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
 
   // ── PDF Export ──
   async function handleExportPDF() {
-    if (!isPro && fields.photoUrl) { setUpgradeModal('CV Export mit Foto'); return }
+
     setExporting(true)
     try {
       const { default: html2canvas } = await import('html2canvas')
