@@ -10,6 +10,7 @@ import { createClient } from '@/lib/supabase/client'
 import UpgradeModal from '@/components/UpgradeModal'
 
 const NordicMinimal  = dynamic(() => import('@/components/cv/NordicMinimal'),  { ssr: false })
+const ElegantPro     = dynamic(() => import('@/components/cv/ElegantPro'),     { ssr: false })
 const NordicSidebar  = dynamic(() => import('@/components/cv/NordicSidebar'),  { ssr: false })
 const ModernSplit    = dynamic(() => import('@/components/cv/ModernSplit'),    { ssr: false })
 const DarkPro        = dynamic(() => import('@/components/cv/DarkPro'),        { ssr: false })
@@ -51,6 +52,7 @@ const C = {
 
 const DESIGNS: { id: CVDesign; label: string; desc: string; proOnly: boolean; accent: string; emoji: string }[] = [
   { id: 'NordicMinimal',   label: 'Nordic Minimal',  desc: 'Klar, sauber, zeitlos',         proOnly: false, accent: '#1B2E6B', emoji: '📋' },
+  { id: 'ElegantPro',     label: 'Elegant Pro',     desc: 'Professionell & strukturiert',  proOnly: false, accent: '#1B2E6B', emoji: '⭐' },
   { id: 'NordicSidebar',  label: 'Nordic Sidebar',  desc: 'Beige Sidebar, elegant',        proOnly: true,  accent: '#8B7355', emoji: '🌿' },
   { id: 'ModernSplit',    label: 'Modern Split',    desc: 'Zweispaltig, luftig',            proOnly: true,  accent: '#7B78CC', emoji: '✨' },
   { id: 'DarkPro',        label: 'Dark Pro',        desc: 'Dunkel, professionell',         proOnly: true,  accent: '#C9A84C', emoji: '🌙' },
@@ -117,6 +119,7 @@ function initFromProfile(profile: Record<string, unknown> | null): Omit<CVProps,
 // ── CV Renderer ───────────────────────────────────────────────────────────────
 function CVRenderer({ design, props }: { design: CVDesign; props: CVProps }) {
   switch (design) {
+    case 'ElegantPro':     return <ElegantPro     {...props} />
     case 'NordicSidebar':  return <NordicSidebar  {...props} />
     case 'ModernSplit':    return <ModernSplit    {...props} />
     case 'DarkPro':        return <DarkPro        {...props} />

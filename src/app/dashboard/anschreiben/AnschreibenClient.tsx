@@ -33,6 +33,7 @@ interface Props {
 // ── Design config for cover letter styling ────────────────────────────────────
 const DESIGN_CFG: Record<CVDesign, { headerBg: string; headerColor: string; accent: string }> = {
   NordicMinimal:   { headerBg: '#1B2E6B', headerColor: '#fff',    accent: '#1B2E6B' },
+  ElegantPro:      { headerBg: '#1B2E6B', headerColor: '#fff',    accent: '#1B2E6B' },
   NordicSidebar:   { headerBg: '#F5EDE3', headerColor: '#3D2B1F', accent: '#8B7355' },
   ModernSplit:     { headerBg: '#7B78CC', headerColor: '#fff',    accent: '#7B78CC' },
   DarkPro:         { headerBg: '#2A2A2A', headerColor: '#C9A84C', accent: '#C9A84C' },
@@ -41,12 +42,13 @@ const DESIGN_CFG: Record<CVDesign, { headerBg: string; headerColor: string; acce
 }
 
 const DESIGNS: { id: CVDesign; label: string; desc: string; proOnly: boolean; emoji: string }[] = [
-  { id: 'NordicMinimal',   label: 'Nordic Minimal',   desc: 'Klar & zeitlos',        proOnly: false, emoji: '📋' },
-  { id: 'NordicSidebar',  label: 'Nordic Sidebar',   desc: 'Beige, elegant',        proOnly: true,  emoji: '🌿' },
-  { id: 'ModernSplit',    label: 'Modern Split',     desc: 'Zweispaltig, modern',   proOnly: true,  emoji: '✨' },
-  { id: 'DarkPro',        label: 'Dark Pro',         desc: 'Dunkel, professionell', proOnly: true,  emoji: '🌙' },
-  { id: 'ExecutivePhoto', label: 'Executive Photo',  desc: 'Führungsebene',         proOnly: true,  emoji: '📸' },
-  { id: 'MonoElegant',    label: 'Mono Elegant',     desc: 'Minimalistisch',        proOnly: true,  emoji: '⬛' },
+  { id: 'NordicMinimal',   label: 'Nordic Minimal',   desc: 'Klar & zeitlos',               proOnly: false, emoji: '📋' },
+  { id: 'ElegantPro',      label: 'Elegant Pro',      desc: 'Professionell & strukturiert',  proOnly: false, emoji: '⭐' },
+  { id: 'NordicSidebar',  label: 'Nordic Sidebar',   desc: 'Beige, elegant',               proOnly: true,  emoji: '🌿' },
+  { id: 'ModernSplit',    label: 'Modern Split',     desc: 'Zweispaltig, modern',           proOnly: true,  emoji: '✨' },
+  { id: 'DarkPro',        label: 'Dark Pro',         desc: 'Dunkel, professionell',         proOnly: true,  emoji: '🌙' },
+  { id: 'ExecutivePhoto', label: 'Executive Photo',  desc: 'Führungsebene',                 proOnly: true,  emoji: '📸' },
+  { id: 'MonoElegant',    label: 'Mono Elegant',     desc: 'Minimalistisch',                proOnly: true,  emoji: '⬛' },
 ]
 
 // ── Colors ────────────────────────────────────────────────────────────────────

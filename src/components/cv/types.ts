@@ -42,4 +42,4 @@ export interface CVProps {
 export type FontFamily = 'Inter' | 'Georgia' | 'Playfair Display' | 'Roboto' | 'Lato' | 'Montserrat'
 export type FontSize = 'small' | 'medium' | 'large'
 export type LineSpacing = 'compact' | 'normal' | 'relaxed'
-export type CVDesign = 'NordicMinimal' | 'NordicSidebar' | 'ModernSplit' | 'DarkPro' | 'ExecutivePhoto' | 'MonoElegant'
+export type CVDesign = 'NordicMinimal' | 'ElegantPro' | 'NordicSidebar' | 'ModernSplit' | 'DarkPro' | 'ExecutivePhoto' | 'MonoElegant'
