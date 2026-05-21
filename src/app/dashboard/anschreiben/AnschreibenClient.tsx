@@ -9,7 +9,7 @@ import UpgradeModal from '@/components/UpgradeModal'
 
 const MAX_FREE_EDITS = 5
 const MAX_PRO_LETTERS = 5
-const MAX_FREE_LETTERS = 1
+const MAX_FREE_LETTERS = 3
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface CoverLetter {

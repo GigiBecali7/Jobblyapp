@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 
-const MAX_FREE_LETTERS = 1
+const MAX_FREE_LETTERS = 3
 const MAX_PRO_LETTERS  = 5
 const MAX_FREE_EDITS   = 5
 

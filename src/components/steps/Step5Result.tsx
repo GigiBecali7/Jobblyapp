@@ -62,7 +62,6 @@ export default function Step5Result({
   }
 
   async function exportPDF() {
-    if (!isPro) { onNeedPro(); return }
     if (!cvRef.current) return
     setExporting('pdf')
     try {
@@ -88,7 +87,6 @@ export default function Step5Result({
   }
 
   async function exportWord() {
-    if (!isPro) { onNeedPro(); return }
     if (!active) return
     setExporting('word')
     try {
@@ -341,10 +339,10 @@ export default function Step5Result({
       <div style={{ padding: '1.25rem 1.5rem', borderTop: '0.5px solid var(--border)', marginTop: '1.5rem', display: 'grid', gap: 8, gridTemplateColumns: '1fr 1fr 1fr' }}>
         <button className="btn btn-out" onClick={onStartOver} style={{ fontSize: 13 }}>Start over</button>
         <button className="btn" onClick={exportPDF} disabled={exporting === 'pdf'} style={{ fontSize: 13, position: 'relative' }}>
-          {exporting === 'pdf' ? 'Exporting…' : (isPro ? '↓ PDF' : '↓ PDF (Pro)')}
+          {exporting === 'pdf' ? 'Exporting…' : '↓ PDF'}
         </button>
         <button className="btn" onClick={exportWord} disabled={exporting === 'word'} style={{ fontSize: 13, background: 'rgba(27,46,107,0.5)' }}>
-          {exporting === 'word' ? 'Exporting…' : (isPro ? '↓ Word' : '↓ Word (Pro)')}
+          {exporting === 'word' ? 'Exporting…' : '↓ Word'}
         </button>
       </div>
     </div>

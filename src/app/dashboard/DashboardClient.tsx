@@ -30,7 +30,7 @@ type NavId = 'dashboard' | 'jobs' | 'applications' | 'cv' | 'letter' | 'profile'
 
 const NAV: { id: NavId; icon: string; label: string; badge?: string }[] = [
   { id: 'dashboard',    icon: '⊞',  label: 'Dashboard' },
-  { id: 'jobs',         icon: '🔍', label: 'Jobs finden' },
+  { id: 'jobs',         icon: '🔍', label: 'Jobs finden', badge: 'Bald' },
   { id: 'applications', icon: '📋', label: 'Bewerbungen' },
   { id: 'cv',           icon: '📄', label: 'Lebenslauf' },
   { id: 'letter',       icon: '✉️', label: 'Anschreiben' },
@@ -1029,6 +1029,38 @@ function JobsSection({ isPro, onSelect, onNeedPro, initialSearch, profile }: { i
       {!loading && !apiError && filtered.map(job => (
         <JobCard key={job.id} job={job} onClick={() => { if (!isPro) { onNeedPro(); return }; onSelect(job) }} />
       ))}
+    </div>
+  )
+}
+
+// ── Section: Jobs Coming Soon ─────────────────────────────────────────────────
+function JobsComingSoonSection({ profile }: { profile: UserProfile }) {
+  const supabase = createClient()
+  const [alerts, setAlerts] = useState<boolean>(Boolean((profile as UserProfile & Record<string, unknown>).job_alerts ?? true))
+
+  async function toggleAlerts() {
+    const next = !alerts
+    setAlerts(next)
+    await supabase.from('profiles').update({ job_alerts: next } as Record<string, unknown>).eq('id', profile.id)
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 420, padding: '48px 24px', textAlign: 'center' }}>
+      <div style={{ fontSize: 56, marginBottom: 20 }}>💼</div>
+      <div style={{ fontSize: 11, fontWeight: 700, color: C.navy3, textTransform: 'uppercase' as const, letterSpacing: '0.12em', marginBottom: 12 }}>Demnächst verfügbar</div>
+      <h2 style={{ fontSize: 26, fontWeight: 700, color: C.white, marginBottom: 12, letterSpacing: '-0.4px' }}>Jobsuche kommt bald!</h2>
+      <p style={{ fontSize: 14, color: C.mid, lineHeight: 1.6, maxWidth: 380, marginBottom: 32 }}>
+        Wir arbeiten daran, dir die besten Jobs aus dem DACH-Raum direkt hier zu zeigen. Lass dich benachrichtigen, sobald es losgeht.
+      </p>
+      <button
+        onClick={toggleAlerts}
+        style={{ padding: '13px 28px', borderRadius: 12, background: alerts ? 'rgba(27,46,107,0.35)' : `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: alerts ? C.navy3 : C.white, border: alerts ? `0.5px solid rgba(147,175,253,0.3)` : 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 700, transition: 'all .2s' }}
+      >
+        {alerts ? '🔔 Du wirst benachrichtigt' : '🔔 Benachrichtige mich'}
+      </button>
+      {alerts && (
+        <p style={{ fontSize: 12, color: C.mid, marginTop: 12 }}>Wir schreiben dir, sobald die Jobsuche live ist.</p>
+      )}
     </div>
   )
 }
@@ -2978,7 +3010,7 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
   function renderContent(mob?: boolean) {
     const m = mob ?? isMobile
     switch (activeNav) {
-      case 'jobs': return <JobsSection isPro={isPro} onSelect={j => { trackEvent('ViewContent', { content_name: j.title, content_category: 'Job', content_type: 'product' }); setSelectedJob(j) }} onNeedPro={() => setUpgradeModal('1-Klick Bewerbung')} initialSearch={globalSearch} profile={profile} />
+      case 'jobs': return <JobsComingSoonSection profile={profile} />
       case 'applications': return <ApplicationsSection applications={applications} profile={profile} />
       case 'cv': { router.push('/dashboard/lebenslauf'); return null }
       case 'letter': { router.push('/dashboard/anschreiben'); return null }
