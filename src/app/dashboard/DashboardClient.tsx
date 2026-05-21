@@ -2960,6 +2960,7 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
   const isPro = !!profile.is_pro
   const isMobile = useIsMobile()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [quickApplyUrl, setQuickApplyUrl] = useState('')
 
   // Show upgrade/cancel toast from URL param (once)
   useEffect(() => {
@@ -3066,6 +3067,35 @@ export default function DashboardClient({ profile, applications, justUpgraded, u
             <StatCard icon="📊" value={`${profileScore}%`} label="Profil Match" sub={profileScore >= 80 ? 'Sehr gut' : profileScore >= 50 ? 'Ausbaufähig' : 'Unvollständig'} subColor={profileScore >= 80 ? C.success : C.amber} onClick={() => setActiveNav('profile')} />
             <StatCard icon="📋" value={String(applications.length)} label="Bewerbungen" sub="Insgesamt" subColor={C.mid} onClick={() => setActiveNav('applications')} />
             <StatCard icon="⭐" value={String(applications.filter(a => ((a as unknown as Record<string, unknown>).status as string) === 'Interview').length)} label="Einladungen" sub="Letzte 30 Tage" subColor={C.mid} onClick={() => setActiveNav('applications')} />
+          </div>
+
+          {/* ── Schnell bewerben widget ── */}
+          <div style={{ marginBottom: 20, padding: '16px 18px', borderRadius: 12, border: `0.5px solid rgba(27,46,107,0.35)`, background: 'rgba(27,46,107,0.1)' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.white, marginBottom: 2 }}>🚀 Schnell bewerben</div>
+            <div style={{ fontSize: 12, color: C.mid, marginBottom: 12 }}>Job-Link einfügen und sofort Anschreiben generieren</div>
+            <div style={{ display: 'flex', gap: 10, flexDirection: m ? 'column' : 'row' }}>
+              <input
+                value={quickApplyUrl}
+                onChange={e => setQuickApplyUrl(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key !== 'Enter' || !quickApplyUrl.trim()) return
+                  if (!isPro) { setUpgradeModal('1-Klick Bewerbung'); return }
+                  router.push(`/dashboard/anschreiben?url=${encodeURIComponent(quickApplyUrl.trim())}`)
+                }}
+                placeholder="Link einfügen… (karriere.at, willhaben, StepStone)"
+                style={{ flex: 1, padding: '10px 14px', minHeight: 44, borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: 'rgba(255,255,255,0.04)', color: C.white, fontFamily: 'inherit', fontSize: m ? 16 : 13, outline: 'none' }}
+              />
+              <button
+                onClick={() => {
+                  if (!quickApplyUrl.trim()) return
+                  if (!isPro) { setUpgradeModal('1-Klick Bewerbung'); return }
+                  router.push(`/dashboard/anschreiben?url=${encodeURIComponent(quickApplyUrl.trim())}`)
+                }}
+                style={{ padding: '10px 20px', minHeight: 44, borderRadius: 9, background: `linear-gradient(135deg, ${C.navy}, ${C.navy2})`, color: C.white, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}
+              >
+                Los →
+              </button>
+            </div>
           </div>
 
           {/* ── Mobile quick actions ── */}

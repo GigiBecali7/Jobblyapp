@@ -175,10 +175,34 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
   const [upgradeModal, setUpgradeModal] = useState<string | null>(null)
   const [errors, setErrors]         = useState<{ job?: string; company?: string }>({})
   const [isDirty, setIsDirty]       = useState(false)
+
+  // ── Job-Link parse state ──
+  const [inputTab, setInputTab]     = useState<'link' | 'manual'>('link')
+  const [linkUrl, setLinkUrl]       = useState('')
+  const [parsing, setParsing]       = useState(false)
+  const [parsedTitle, setParsedTitle]   = useState('')
+  const [parsedCompany, setParsedCompany] = useState('')
+  const [parsedDesc, setParsedDesc] = useState('')
+  const [parsedOk, setParsedOk]     = useState(false)
+  const [parseError, setParseError] = useState('')
+  const [jobUrl, setJobUrl]         = useState('')
+
   const autoSaveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const autoSaveDataRef  = useRef({ isDirty: false, editingId: null as string | null, editableText: '', selectedDesign: 'NordicMinimal' as CVDesign })
 
   function showToast(msg: string, ok = true) { setToast({ msg, ok }); setTimeout(() => setToast(null), 3500) }
+
+  // Read ?url= param on mount (from dashboard quick-apply widget)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const urlParam = params.get('url')
+    if (urlParam) {
+      setLinkUrl(urlParam)
+      setInputTab('link')
+      setView('input')
+    }
+  }, [])
 
   // ── Dirty tracking ──
   const markDirty = useCallback(() => { if (view === 'preview') setIsDirty(true) }, [view])
@@ -227,6 +251,42 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
     setJobTitle(''); setCompany(''); setEditableText('')
     setEditingId(null); setErrors({}); setSelectedDesign('NordicMinimal')
     setIsDirty(false)
+    setLinkUrl(''); setParsedOk(false); setParsedTitle(''); setParsedCompany('')
+    setParsedDesc(''); setParseError(''); setJobUrl(''); setInputTab('link')
+  }
+
+  async function handleParseUrl() {
+    const url = linkUrl.trim()
+    if (!url) return
+    setParsing(true)
+    setParsedOk(false)
+    setParseError('')
+    try {
+      const res = await fetch('/api/jobs/parse-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      })
+      const json = await res.json()
+      if (json.success) {
+        setParsedTitle(json.title || '')
+        setParsedCompany(json.company || '')
+        setParsedDesc(json.description || '')
+        setJobTitle(json.title || '')
+        setCompany(json.company || '')
+        setJobUrl(url)
+        setParsedOk(true)
+        setErrors({})
+      } else {
+        setParseError(json.reason || 'blocked')
+        setInputTab('manual')
+      }
+    } catch {
+      setParseError('network_error')
+      setInputTab('manual')
+    } finally {
+      setParsing(false)
+    }
   }
 
   function handleBackToList() {
@@ -401,8 +461,21 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
         status: 'Gesendet',
       })
       if (!editingId) await handleSave()
-      showToast(t.toastApplySuccess)
-      setTimeout(() => { window.location.href = '/dashboard' }, 1800)
+
+      // Open portal in new tab if a URL was provided
+      if (jobUrl) {
+        const opened = window.open(jobUrl, '_blank')
+        if (!opened) showToast('Popup blockiert — nutze "Zum Stellenportal" um das Portal zu öffnen.', false)
+      }
+
+      // Auto-download PDF
+      await handleExportPDF()
+
+      const msg = jobUrl
+        ? 'Bewerbung gespeichert! PDF heruntergeladen — lade es im Portal hoch.'
+        : t.toastApplySuccess
+      showToast(msg)
+      setTimeout(() => { window.location.href = '/dashboard' }, 2500)
     } catch { showToast(t.toastApplyError, false) }
     finally { setApplying(false) }
   }
@@ -543,32 +616,107 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
         {view === 'input' && (
           <div style={{ backgroundColor: C.card, borderRadius: 14, padding: mob ? 16 : 32, border: `1px solid ${C.border}` }}>
             <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 20 }}>{t.newLetter}</h2>
-            <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr' : '1fr 1fr', gap: 16, marginBottom: 24 }}>
-              <div>
-                <label style={labelStyle}>{t.letterJob}</label>
-                <input value={jobTitle} onChange={e => { setJobTitle(e.target.value); if (errors.job) setErrors(p => ({ ...p, job: '' })) }}
-                  style={{ ...inStyle, borderColor: errors.job ? C.error : 'rgba(255,255,255,0.1)' }}
-                  placeholder={t.letterJobPlaceholder} />
-                {errors.job && <div style={{ fontSize: 11, color: C.error, marginTop: 4 }}>{errors.job}</div>}
-              </div>
-              <div>
-                <label style={labelStyle}>{t.letterCompany}</label>
-                <input value={company} onChange={e => { setCompany(e.target.value); if (errors.company) setErrors(p => ({ ...p, company: '' })) }}
-                  style={{ ...inStyle, borderColor: errors.company ? C.error : 'rgba(255,255,255,0.1)' }}
-                  placeholder={t.letterCompanyPlaceholder} />
-                {errors.company && <div style={{ fontSize: 11, color: C.error, marginTop: 4 }}>{errors.company}</div>}
-              </div>
+
+            {/* ── Tabs ── */}
+            <div style={{ display: 'flex', gap: 0, marginBottom: 24, borderBottom: `1px solid ${C.border}` }}>
+              {([['link', '🔗 Job-Link einfügen'], ['manual', '✏️ Manuell eingeben']] as const).map(([tab, label]) => (
+                <button key={tab} onClick={() => setInputTab(tab)}
+                  style={{ padding: '10px 18px', background: 'none', border: 'none', borderBottom: `2px solid ${inputTab === tab ? C.navy3 : 'transparent'}`, color: inputTab === tab ? C.white : C.mid, fontFamily: 'inherit', fontSize: 13, fontWeight: inputTab === tab ? 700 : 400, cursor: 'pointer', transition: 'all .15s', whiteSpace: 'nowrap' }}>
+                  {label}
+                </button>
+              ))}
             </div>
 
-            {generating ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: '32px 0' }}>
-                <div style={{ width: 44, height: 44, border: `3px solid ${C.navy}`, borderTopColor: C.navy3, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-                <div style={{ fontSize: 14, color: C.navy3 }}>{t.letterGenerating}</div>
+            {/* ── Tab 1: Job-Link ── */}
+            {inputTab === 'link' && (
+              <div>
+                <label style={labelStyle}>Job-URL</label>
+                <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexDirection: mob ? 'column' : 'row' }}>
+                  <input
+                    value={linkUrl}
+                    onChange={e => { setLinkUrl(e.target.value); setParsedOk(false) }}
+                    onKeyDown={e => { if (e.key === 'Enter' && !parsing && linkUrl.trim()) handleParseUrl() }}
+                    placeholder="https://karriere.at/…, willhaben.at/…, stepstone.at/…"
+                    style={{ ...inStyle, flex: 1 }}
+                  />
+                  <button
+                    onClick={handleParseUrl}
+                    disabled={parsing || !linkUrl.trim()}
+                    style={{ ...btnPrimary('#10b981'), whiteSpace: 'nowrap', opacity: parsing || !linkUrl.trim() ? 0.6 : 1, minHeight: 44 }}>
+                    {parsing ? '⏳ Analysiere…' : 'Job analysieren →'}
+                  </button>
+                </div>
+
+                {parsedOk && (
+                  <div style={{ backgroundColor: 'rgba(16,185,129,0.08)', border: `1px solid rgba(16,185,129,0.25)`, borderRadius: 12, padding: 20, marginBottom: 20 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: C.success, marginBottom: 14, textTransform: 'uppercase' as const, letterSpacing: 0.8 }}>✅ Job erkannt — bitte prüfen</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr' : '1fr 1fr', gap: 12, marginBottom: parsedDesc ? 12 : 0 }}>
+                      <div>
+                        <label style={labelStyle}>Stelle</label>
+                        <input value={parsedTitle} onChange={e => { setParsedTitle(e.target.value); setJobTitle(e.target.value) }} style={inStyle} />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Unternehmen</label>
+                        <input value={parsedCompany} onChange={e => { setParsedCompany(e.target.value); setCompany(e.target.value) }} style={inStyle} />
+                      </div>
+                    </div>
+                    {parsedDesc && (
+                      <div style={{ fontSize: 12, color: C.mid, lineHeight: 1.6, borderTop: `1px solid rgba(255,255,255,0.07)`, paddingTop: 12 }}>
+                        <span style={{ fontWeight: 600 }}>Beschreibung:</span> {parsedDesc.slice(0, 300)}{parsedDesc.length > 300 ? '…' : ''}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {generating ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: '32px 0' }}>
+                    <div style={{ width: 44, height: 44, border: `3px solid ${C.navy}`, borderTopColor: C.navy3, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                    <div style={{ fontSize: 14, color: C.navy3 }}>{t.letterGenerating}</div>
+                  </div>
+                ) : parsedOk ? (
+                  <div style={{ display: 'flex', gap: 10, flexDirection: mob ? 'column' : 'row' }}>
+                    <button onClick={handleGenerate} style={{ ...btnPrimary('#10b981'), fontSize: mob ? 16 : 15, padding: mob ? '14px 20px' : '13px 28px', minHeight: 48 }}>✨ Anschreiben generieren</button>
+                    <button onClick={() => { setView('list'); resetForm() }} style={{ ...btnSecondary, minHeight: 44 }}>{t.cancel}</button>
+                  </div>
+                ) : null}
               </div>
-            ) : (
-              <div style={{ display: 'flex', gap: 10, flexDirection: mob ? 'column' : 'row' }}>
-                <button onClick={handleGenerate} style={{ ...btnPrimary('#10b981'), fontSize: mob ? 16 : 15, padding: mob ? '14px 20px' : '13px 28px', minHeight: 48 }}>{t.letterGenerate}</button>
-                <button onClick={() => { setView('list'); resetForm() }} style={{ ...btnSecondary, minHeight: 44 }}>{t.cancel}</button>
+            )}
+
+            {/* ── Tab 2: Manuell ── */}
+            {inputTab === 'manual' && (
+              <div>
+                {parseError && linkUrl && (
+                  <div style={{ backgroundColor: 'rgba(245,158,11,0.08)', border: `1px solid rgba(245,158,11,0.25)`, borderRadius: 10, padding: '12px 16px', marginBottom: 20, fontSize: 13, color: C.amber, lineHeight: 1.5 }}>
+                    Diese Seite konnte nicht automatisch ausgelesen werden. Bitte gib Stelle und Unternehmen manuell ein.
+                  </div>
+                )}
+                <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr' : '1fr 1fr', gap: 16, marginBottom: 24 }}>
+                  <div>
+                    <label style={labelStyle}>{t.letterJob}</label>
+                    <input value={jobTitle} onChange={e => { setJobTitle(e.target.value); if (errors.job) setErrors(p => ({ ...p, job: '' })) }}
+                      style={{ ...inStyle, borderColor: errors.job ? C.error : 'rgba(255,255,255,0.1)' }}
+                      placeholder={t.letterJobPlaceholder} />
+                    {errors.job && <div style={{ fontSize: 11, color: C.error, marginTop: 4 }}>{errors.job}</div>}
+                  </div>
+                  <div>
+                    <label style={labelStyle}>{t.letterCompany}</label>
+                    <input value={company} onChange={e => { setCompany(e.target.value); if (errors.company) setErrors(p => ({ ...p, company: '' })) }}
+                      style={{ ...inStyle, borderColor: errors.company ? C.error : 'rgba(255,255,255,0.1)' }}
+                      placeholder={t.letterCompanyPlaceholder} />
+                    {errors.company && <div style={{ fontSize: 11, color: C.error, marginTop: 4 }}>{errors.company}</div>}
+                  </div>
+                </div>
+                {generating ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: '32px 0' }}>
+                    <div style={{ width: 44, height: 44, border: `3px solid ${C.navy}`, borderTopColor: C.navy3, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                    <div style={{ fontSize: 14, color: C.navy3 }}>{t.letterGenerating}</div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', gap: 10, flexDirection: mob ? 'column' : 'row' }}>
+                    <button onClick={handleGenerate} style={{ ...btnPrimary('#10b981'), fontSize: mob ? 16 : 15, padding: mob ? '14px 20px' : '13px 28px', minHeight: 48 }}>{t.letterGenerate}</button>
+                    <button onClick={() => { setView('list'); resetForm() }} style={{ ...btnSecondary, minHeight: 44 }}>{t.cancel}</button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -585,7 +733,7 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
                   {exporting ? '...' : t.letterPDF}
                 </button>
                 <button onClick={handleExportWord} style={btnPrimary('#2563eb')}>{t.letterWord}</button>
-                <button onClick={() => setShowApplyModal(true)} style={btnPrimary('#10b981')}>
+                <button onClick={() => { if (!isPro) { setUpgradeModal('1-Klick Bewerbung'); return }; setShowApplyModal(true) }} style={btnPrimary('#10b981')}>
                   {t.letterApply}
                 </button>
               </div>
@@ -703,6 +851,12 @@ export default function AnschreibenClient({ isPro, letters: initialLetters, last
                 {applying ? 'Sende...' : '🚀 ' + t.letterApply}
               </button>
             </div>
+            {jobUrl && (
+              <a href={jobUrl} target="_blank" rel="noopener noreferrer"
+                style={{ display: 'block', textAlign: 'center', padding: '12px 16px', borderRadius: 9, marginTop: 10, background: 'rgba(27,46,107,0.2)', color: C.navy3, border: `1px solid rgba(147,175,253,0.2)`, fontSize: 14, fontWeight: 600, textDecoration: 'none' }}>
+                🌐 Zum Stellenportal →
+              </a>
+            )}
           </div>
         </div>
       )}
