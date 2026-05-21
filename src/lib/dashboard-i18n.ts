@@ -1,7 +1,7 @@
 // Dashboard-specific translations for all 6 supported languages.
 // Reads 'jobbly_lang' from localStorage (set by Settings section).
 
-export type DashLang = 'de' | 'en' | 'tr' | 'es' | 'fr' | 'pl'
+export type DashLang = 'de' | 'en' | 'tr' | 'es' | 'fr' | 'pl' | 'it'
 
 export interface DashT {
   // Navigation / common
@@ -566,7 +566,88 @@ const PL: DashT = {
   letterEditHint: 'Tekst jest edytowalny — kliknij, aby edytować',
 }
 
-export const DASH_T: Record<string, DashT> = { de: DE, en: EN, tr: TR, es: ES, fr: FR, pl: PL }
+const IT: DashT = {
+  back: '← Indietro', next: 'Avanti →', save: '💾 Salva', saving: 'Salvataggio...',
+  cancel: 'Annulla', edit: 'Modifica', delete_: 'Elimina', duplicate: 'Duplica',
+  rename: 'Rinomina', copy: 'Copia', dashboard: '← Dashboard',
+
+  cvTitle: 'Curriculum Vitae', newCV: '+ Nuovo CV', overview: '← Panoramica',
+  designStep: 'Scegli il design', formStep: 'I suoi dati', previewStep: 'Anteprima ed esportazione',
+
+  firstName: 'Nome *', lastName: 'Cognome', email: 'E-mail', phone: 'Telefono',
+  city: 'Città', linkedinUrl: 'URL LinkedIn', position: 'Posizione / Titolo *',
+  photoUrl: 'URL foto', profileSummary: 'Profilo / Riepilogo',
+  profilePlaceholder: 'Si presenti in 2–3 frasi...',
+  experience: 'Esperienza professionale', education: 'Formazione',
+  skills: 'Competenze', languages: 'Lingue',
+  cvName: 'Nome del CV', charCount: 'caratteri',
+
+  jobTitle: 'Qualifica', company: 'Azienda', period: 'Periodo (es. 2021–2024)',
+  description: 'Descrizione / Responsabilità',
+  addExperience: '+ Aggiungi esperienza', removeEntry: 'Rimuovi',
+
+  degree: 'Titolo di studio', institution: 'Istituto / Università',
+  addEducation: '+ Aggiungi formazione',
+
+  skillsPlaceholder: 'Inserisca una competenza e prema Invio...',
+
+  language: 'Lingua', level: 'Livello', addLanguage: '+ Aggiungi lingua',
+  levelNative: 'Madrelingua', levelFluent: 'Fluente', levelAdvanced: 'Avanzato',
+  levelIntermediate: 'Intermedio', levelBasic: 'Base',
+
+  langGerman: 'Tedesco', langEnglish: 'Inglese', langFrench: 'Francese',
+  langSpanish: 'Spagnolo', langItalian: 'Italiano', langPortuguese: 'Portoghese',
+  langPolish: 'Polacco', langTurkish: 'Turco', langArabic: 'Arabo',
+  langChinese: 'Cinese', langRussian: 'Russo', langJapanese: 'Giapponese',
+
+  generateAI: '✨ Genera con IA', generating: '⏳ Generazione in corso...',
+  preview: 'Anteprima →', exportPDF: '📄 Scarica PDF',
+  exportWord: '📝 Scarica Word', apply: '🚀 Candidati ora!',
+
+  errorFirstName: 'Il nome è obbligatorio.',
+  errorPosition: 'La posizione è obbligatoria.',
+  errorExperience: 'Inserisca almeno un\'esperienza o una voce di formazione.',
+
+  toastSaved: 'Salvato ✓', toastDeleted: 'Eliminato', toastDuplicated: 'Duplicato ✓',
+  toastPdfError: 'Esportazione PDF non riuscita.', toastWordError: 'Esportazione Word non riuscita.',
+  toastGenerateError: 'Generazione non riuscita — riprovi.',
+  toastFreeLimit: 'Piano gratuito: max. 1 CV. Passi a Pro!',
+  toastProOnly: 'Solo Pro — aggiorni ora!',
+  toastApplySuccess: 'Candidatura inviata con successo! ✓',
+  toastApplyError: 'Errore durante l\'invio — riprovi.',
+
+  cvEmptyTitle: 'Crei il suo primo curriculum vitae professionale',
+  cvEmptyDesc: 'L\'IA genera contenuti professionali — bastano solo 2 minuti.',
+  cvCreateFirst: '✨ Crea ora',
+  letterEmptyTitle: 'Crei la sua lettera di presentazione con IA in pochi secondi',
+  letterEmptyDesc: 'Scelga una posizione e lasci che l\'IA scriva una lettera professionale per Lei.',
+
+  freeDesignNote: 'Gratuito: Nordic Minimal · Passi a Pro per tutti i design',
+  proDesignNote: 'Tutti i 6 design disponibili',
+
+  font: 'Carattere', fontSize: 'Dimensione', lineSpacing: 'Interlinea',
+  sizeSmall: 'Piccolo', sizeMedium: 'Medio', sizeLarge: 'Grande',
+  spacingCompact: 'Compatto', spacingNormal: 'Normale', spacingRelaxed: 'Ampio',
+
+  sectionProfile: 'Profilo', sectionExperience: 'Esperienza Professionale',
+  sectionEducation: 'Formazione', sectionSkills: 'Competenze',
+  sectionLanguages: 'Lingue', sectionContact: 'Contatti',
+  sectionPlaceholder: '—',
+
+  letterTitle: 'Lettera di presentazione', newLetter: '+ Nuova lettera',
+  letterJob: 'Posizione *', letterJobPlaceholder: 'es. Ingegnere del software',
+  letterCompany: 'Azienda *', letterCompanyPlaceholder: 'es. Google Italia',
+  letterGenerate: '✨ Genera con IA', letterGenerating: '⏳ L\'IA sta scrivendo la sua lettera...',
+  letterDesignPick: 'Scegli il design', letterSave: '💾 Salva',
+  letterApply: '🚀 Candidati!', letterPDF: '📄 PDF', letterWord: '📝 Word',
+  letterGreeting: 'Gentile Responsabile,',
+  letterClosing: 'Distinti saluti,',
+  letterSubjectPrefix: 'Candidatura:',
+  letterDesignNote: 'Design abbinato al curriculum',
+  letterEditHint: 'Il testo è modificabile — clicchi per modificare',
+}
+
+export const DASH_T: Record<string, DashT> = { de: DE, en: EN, tr: TR, es: ES, fr: FR, pl: PL, it: IT }
 
 /** Reads `jobbly_lang` from localStorage (set by Settings). Falls back to 'de'. */
 export function getDashT(lang?: string): DashT {

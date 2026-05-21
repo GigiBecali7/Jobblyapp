@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
     const bewerberName = hasName ? `${firstName} ${lastName}`.trim() : ''
 
     const langMap: Record<string, string> = {
-      de: 'Deutsch', en: 'Englisch', tr: 'Türkisch', es: 'Spanisch', fr: 'Französisch', pl: 'Polnisch',
+      de: 'Deutsch', en: 'Englisch', tr: 'Türkisch', es: 'Spanisch', fr: 'Französisch', pl: 'Polnisch', it: 'Italienisch',
     }
     const targetLang = langMap[lang] || 'Deutsch'
 

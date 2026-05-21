@@ -2290,6 +2290,7 @@ function SettingsSection({ profile, isPro, onUpgrade }: { profile: UserProfile; 
     if (br.startsWith('es')) return 'es'
     if (br.startsWith('fr')) return 'fr'
     if (br.startsWith('pl')) return 'pl'
+    if (br.startsWith('it')) return 'it'
     if (br.startsWith('en')) return 'en'
     return 'de'
   }
@@ -2444,7 +2445,7 @@ function SettingsSection({ profile, isPro, onUpgrade }: { profile: UserProfile; 
         <p style={{ fontSize: 12, color: C.mid, marginBottom: 12 }}>Automatisch erkannt aus Browsersprache. Manuelle Auswahl lädt die Seite neu.</p>
         <select value={language} onChange={e => applyLanguage(e.target.value)}
           style={{ padding: '10px 14px', minHeight: 42, borderRadius: 9, border: `0.5px solid rgba(255,255,255,0.1)`, background: '#0D1117', color: C.white, fontFamily: 'inherit', fontSize: 13, outline: 'none', cursor: 'pointer', width: '100%' }}>
-          {[['de', '🇩🇪 Deutsch'], ['en', '🇬🇧 English'], ['tr', '🇹🇷 Türkçe'], ['es', '🇪🇸 Español'], ['fr', '🇫🇷 Français'], ['pl', '🇵🇱 Polski']].map(([v, l]) => (
+          {[['de', '🇩🇪 Deutsch'], ['en', '🇬🇧 English'], ['tr', '🇹🇷 Türkçe'], ['es', '🇪🇸 Español'], ['fr', '🇫🇷 Français'], ['pl', '🇵🇱 Polski'], ['it', '🇮🇹 Italiano']].map(([v, l]) => (
             <option key={v} value={v}>{l}</option>
           ))}
         </select>
