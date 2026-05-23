@@ -33,6 +33,11 @@ export interface CVProps {
   education: string
   skills: string[]
   languages: string
+  certifications?: string
+  drivingLicense?: string
+  nationality?: string
+  dateOfBirth?: string
+  availability?: string
   fontFamily?: FontFamily
   fontSize?: FontSize
   lineSpacing?: LineSpacing

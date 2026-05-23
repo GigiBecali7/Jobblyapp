@@ -62,6 +62,30 @@ const DESIGNS: { id: CVDesign; label: string; desc: string; proOnly: boolean; ac
 
 const FONT_FAMILIES: FontFamily[] = ['Inter', 'Georgia', 'Playfair Display', 'Roboto', 'Lato', 'Montserrat']
 
+// ── Skill suggestions by profession ──────────────────────────────────────────
+function getSkillSuggestions(position: string, industry: string): string[] {
+  const text = `${position} ${industry}`.toLowerCase()
+  if (text.includes('mechanik') || text.includes('kfz') || text.includes('fahrzeug'))
+    return ['Fahrzeugdiagnose', 'Kfz-Reparatur', 'Hydraulik', 'OBD-Diagnose', 'Reifenmontage', 'Bremsenservice', 'Elektrik', 'Motordiagnose']
+  if (text.includes('develop') || text.includes('software') || text.includes('programm') || text.includes('engineer'))
+    return ['JavaScript', 'React', 'TypeScript', 'Git', 'SQL', 'HTML/CSS', 'Node.js', 'REST API']
+  if (text.includes('pflege') || text.includes('kranken') || text.includes('gesundheit') || text.includes('dgkp'))
+    return ['Patientenversorgung', 'Medikamentenvergabe', 'DGKP', 'Pflegedokumentation', 'Wundversorgung', 'Infusionstherapie']
+  if (text.includes('bau') || text.includes('handwerk') || text.includes('tischler') || text.includes('elektro'))
+    return ['Bauzeichnungen lesen', 'Arbeitssicherheit', 'Qualitätskontrolle', 'AutoCAD', 'Vermessung']
+  if (text.includes('logistik') || text.includes('lager') || text.includes('fahrer') || text.includes('transport'))
+    return ['Lagerverwaltung', 'Gabelstapler', 'Routenplanung', 'SAP MM', 'Bestandsmanagement', 'Führerschein C']
+  if (text.includes('buchhalter') || text.includes('steuer') || text.includes('finanz') || text.includes('controlling'))
+    return ['SAP FI', 'Excel', 'BMD NTCS', 'Jahresabschluss', 'Umsatzsteuer', 'Bilanzierung', 'KPI-Analyse']
+  if (text.includes('marketing') || text.includes('social media') || text.includes('werbung'))
+    return ['Social Media Marketing', 'Content Marketing', 'Google Analytics', 'SEO', 'Adobe Creative Suite']
+  if (text.includes('vertrieb') || text.includes('sales') || text.includes('kundenberater'))
+    return ['Kundenakquise', 'CRM', 'Salesforce', 'Verhandlungsführung', 'B2B Sales', 'Präsentation']
+  if (text.includes('küche') || text.includes('koch') || text.includes('gastronomie') || text.includes('hotel'))
+    return ['HACCP', 'Mise en place', 'Speiseplankalkulation', 'Wareneinkauf', 'Küchenhygiene']
+  return ['Teamarbeit', 'MS Office', 'Kommunikation', 'Projektmanagement', 'Zeitmanagement', 'Eigeninitiative', 'Problemlösung']
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 async function fetchImageAsBase64(url: string): Promise<string> {
   const res = await fetch(url)
@@ -105,14 +129,20 @@ function emptyLang(): LangEntry { return { language: '', level: '' } }
 
 function initFromProfile(profile: Record<string, unknown> | null): Omit<CVProps, 'experience' | 'education' | 'languages' | 'skills'> {
   const p = profile || {}
+  const rawDob = p.date_of_birth ? String(p.date_of_birth).split('T')[0] : ''
   return {
     firstName: String(p.first_name || ''), lastName: String(p.last_name || ''),
     email: String(p.email || ''), phone: String(p.phone || ''),
     city: String(p.city || ''), address: String(p.address || ''),
     zipCode: String(p.zip_code || ''), country: String(p.country || 'Österreich'),
     linkedin: String(p.linkedin || ''),
-    photoUrl: String(p.avatar_url || p.photo_url || p.photo || ''), position: String(p.position || ''),
+    photoUrl: String(p.avatar_url || p.photo_url || p.photo || ''), position: String(p.position || p.desired_position || ''),
     profile: '', fontFamily: 'Inter', fontSize: 'medium', lineSpacing: 'normal',
+    certifications: String(p.certifications || ''),
+    drivingLicense: String(p.driving_license || ''),
+    nationality: String(p.nationality || ''),
+    dateOfBirth: rawDob,
+    availability: String(p.availability || 'Ab sofort'),
   }
 }
 
@@ -344,6 +374,11 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
       profile: cv.data.profile || '',
       fontFamily: cv.data.fontFamily || 'Inter', fontSize: cv.data.fontSize || 'medium',
       lineSpacing: cv.data.lineSpacing || 'normal',
+      certifications: cv.data.certifications || '',
+      drivingLicense: cv.data.drivingLicense || '',
+      nationality: cv.data.nationality || '',
+      dateOfBirth: cv.data.dateOfBirth || '',
+      availability: cv.data.availability || 'Ab sofort',
     })
     setProfileText(cv.data.profile || '')
     setExpEntries(cv.expEntries?.length ? cv.expEntries : [emptyExp()])
@@ -470,15 +505,19 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
 
   function validateForAI(): string[] {
     const missing: string[] = []
-    if (!fields.firstName.trim()) missing.push('Vorname')
-    if (!fields.lastName.trim())  missing.push('Nachname')
-    if (!fields.email.trim())     missing.push('E-Mail-Adresse')
-    if (!fields.phone.trim())     missing.push('Telefonnummer')
-    if (!fields.city.trim())      missing.push('Wohnort / Stadt')
-    if (!fields.position.trim())  missing.push('Wunschposition')
-    const hasExp = expEntries.some(e => e.title.trim() && e.company.trim())
+    if (!fields.firstName.trim())    missing.push('Vorname')
+    if (!fields.lastName.trim())     missing.push('Nachname')
+    if (!fields.email.trim())        missing.push('E-Mail-Adresse')
+    if (!fields.phone.trim())        missing.push('Telefonnummer')
+    if (!fields.city.trim())         missing.push('Wohnort / Stadt')
+    if (!fields.address?.trim())     missing.push('Adresse (Straße & Hausnummer)')
+    if (!fields.zipCode?.trim())     missing.push('Postleitzahl (PLZ)')
+    if (!fields.position.trim())     missing.push('Berufsbezeichnung / Wunschposition')
+    const hasExpWithDesc = expEntries.some(e => e.title.trim() && e.description.trim())
+    if (!hasExpWithDesc)             missing.push('min. 1 Berufserfahrung mit Tätigkeitsbeschreibung')
     const hasEdu = eduEntries.some(e => e.degree.trim() && e.institution.trim())
-    if (!hasExp && !hasEdu) missing.push('mindestens eine Berufserfahrung (Titel + Firma) oder Ausbildung (Abschluss + Institution)')
+    if (!hasEdu)                     missing.push('min. 1 Ausbildung (Abschluss + Institution)')
+    if (skillTags.length < 3)        missing.push(`Kenntnisse / Skills (aktuell ${skillTags.length}, min. 3 erforderlich)`)
     return missing
   }
 
@@ -593,7 +632,8 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
 
   // ── PDF Export ──
   async function handleExportPDF() {
-
+    const missing = validateForAI()
+    if (missing.length > 0) { setValidModal(missing); return }
     setExporting(true)
     try {
       const { default: html2canvas } = await import('html2canvas')
@@ -631,35 +671,61 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
 
   // ── Word Export ──
   async function handleExportWord() {
+    const missing = validateForAI()
+    if (missing.length > 0) { setValidModal(missing); return }
     try {
       const { Document, Packer, Paragraph, TextRun, HeadingLevel } = await import('docx')
-      const doc = new Document({ sections: [{ properties: {}, children: [
+      const wordChildren = [
         new Paragraph({ text: `${fields.firstName} ${fields.lastName}`, heading: HeadingLevel.HEADING_1 }),
         new Paragraph({ children: [new TextRun({ text: fields.position, bold: true })] }),
         new Paragraph({ text: '' }),
+        // Contact
         ...[
-          fields.email,
-          fields.phone,
-          fields.address,
+          fields.email && `✉ ${fields.email}`,
+          fields.phone && `✆ ${fields.phone}`,
+          fields.address && `📍 ${fields.address}`,
           (fields.zipCode || fields.city) ? [fields.zipCode, fields.city].filter(Boolean).join(' ') : '',
           fields.country,
         ].filter(Boolean).map(s => new Paragraph({ text: s as string })),
         new Paragraph({ text: '' }),
-        new Paragraph({ text: sections.profile, heading: HeadingLevel.HEADING_2 }),
-        new Paragraph({ text: profileText }),
-        new Paragraph({ text: '' }),
+        // Profile
+        ...(profileText ? [
+          new Paragraph({ text: sections.profile, heading: HeadingLevel.HEADING_2 }),
+          new Paragraph({ text: profileText }),
+          new Paragraph({ text: '' }),
+        ] : []),
+        // Experience
         new Paragraph({ text: sections.experience, heading: HeadingLevel.HEADING_2 }),
         ...serializeExp(expEntries).split('\n').filter(Boolean).map(l => new Paragraph({ text: l })),
         new Paragraph({ text: '' }),
+        // Education
         new Paragraph({ text: sections.education, heading: HeadingLevel.HEADING_2 }),
         ...serializeEdu(eduEntries).split('\n').filter(Boolean).map(l => new Paragraph({ text: l })),
         new Paragraph({ text: '' }),
+        // Skills
         new Paragraph({ text: sections.skills, heading: HeadingLevel.HEADING_2 }),
         ...skillTags.map(s => new Paragraph({ text: `• ${s}` })),
         new Paragraph({ text: '' }),
+        // Languages
         new Paragraph({ text: sections.languages, heading: HeadingLevel.HEADING_2 }),
         new Paragraph({ text: serializeLangs(langEntries) }),
-      ] }] })
+        // Certifications (if present)
+        ...(fields.certifications?.trim() ? [
+          new Paragraph({ text: '' }),
+          new Paragraph({ text: 'Zertifikate & Kurse', heading: HeadingLevel.HEADING_2 }),
+          ...fields.certifications.split('\n').map(l => l.trim()).filter(Boolean).map(l => new Paragraph({ text: `• ${l}` })),
+        ] : []),
+        // Additional info (if present)
+        ...(fields.dateOfBirth || fields.nationality || (fields.drivingLicense && fields.drivingLicense !== 'Kein' && fields.drivingLicense !== '') || fields.availability ? [
+          new Paragraph({ text: '' }),
+          new Paragraph({ text: 'Weitere Angaben', heading: HeadingLevel.HEADING_2 }),
+          ...(fields.dateOfBirth ? [new Paragraph({ text: `Geburtsdatum: ${fields.dateOfBirth}` })] : []),
+          ...(fields.nationality ? [new Paragraph({ text: `Nationalität: ${fields.nationality}` })] : []),
+          ...(fields.drivingLicense && fields.drivingLicense !== 'Kein' && fields.drivingLicense !== '' ? [new Paragraph({ text: `Führerschein: ${fields.drivingLicense}` })] : []),
+          ...(fields.availability ? [new Paragraph({ text: `Verfügbarkeit: ${fields.availability}` })] : []),
+        ] : []),
+      ]
+      const doc = new Document({ sections: [{ properties: {}, children: wordChildren }] })
       const blob = await Packer.toBlob(doc)
       const url  = URL.createObjectURL(blob)
       const a    = document.createElement('a'); a.href = url
@@ -690,18 +756,20 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
       {validModal && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', zIndex: 9000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
           onClick={e => { if (e.target === e.currentTarget) setValidModal(null) }}>
-          <div style={{ backgroundColor: C.card, border: `1px solid rgba(248,113,113,0.3)`, borderRadius: 16, padding: 32, maxWidth: 460, width: '100%' }}>
-            <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>Bitte fülle alle Pflichtfelder aus</div>
-            <div style={{ fontSize: 13, color: C.mid, marginBottom: 20 }}>Für eine professionelle KI-Generierung werden folgende Angaben benötigt:</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24 }}>
+          <div style={{ backgroundColor: C.card, border: `1px solid rgba(245,158,11,0.4)`, borderRadius: 16, padding: 32, maxWidth: 500, width: '100%' }}>
+            <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>⚠️</span> Dein CV braucht noch folgende Angaben:
+            </div>
+            <div style={{ fontSize: 13, color: C.mid, marginBottom: 18 }}>Für einen professionellen Lebenslauf werden diese Daten benötigt:</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginBottom: 24 }}>
               {validModal.map((label, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: C.error }}>
-                  <span style={{ fontSize: 10 }}>✕</span> {label}
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: C.amber }}>
+                  <span style={{ fontSize: 10 }}>▸</span> {label}
                 </div>
               ))}
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
-              <a href="/dashboard/meine-daten" style={{ ...btnPrimary(C.navy), textDecoration: 'none', flex: 1, textAlign: 'center', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>Felder ausfüllen →</a>
+              <a href="/dashboard/meine-daten" style={{ ...btnPrimary(C.amber), textDecoration: 'none', flex: 1, textAlign: 'center', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5, color: '#000' }}>Jetzt ergänzen →</a>
               <button onClick={() => setValidModal(null)} style={{ ...btnSecondary, flex: 1 }}>Schließen</button>
             </div>
           </div>
@@ -924,6 +992,47 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
                         style={inStyle} />
                     </div>
                   </div>
+                  {/* Optional personal fields */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14, marginTop: 14 }}>
+                    <div>
+                      <label style={labelStyle}>Geburtsdatum <span style={{ color: C.mid, fontWeight: 400 }}>(optional)</span></label>
+                      <input type="date" value={fields.dateOfBirth || ''}
+                        onChange={e => { setFields(p => ({ ...p, dateOfBirth: e.target.value })); markDirty() }}
+                        style={{ ...inStyle, colorScheme: 'dark' }} />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Führerschein <span style={{ color: C.mid, fontWeight: 400 }}>(optional)</span></label>
+                      <select value={fields.drivingLicense || ''}
+                        onChange={e => { setFields(p => ({ ...p, drivingLicense: e.target.value })); markDirty() }}
+                        style={selStyle}>
+                        <option value="">Kein</option>
+                        <option value="B">B (PKW)</option>
+                        <option value="A">A (Motorrad)</option>
+                        <option value="BE">BE (PKW + Anhänger)</option>
+                        <option value="C">C (LKW)</option>
+                        <option value="CE">CE (LKW + Anhänger)</option>
+                        <option value="A, B">A + B</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Nationalität <span style={{ color: C.mid, fontWeight: 400 }}>(optional)</span></label>
+                      <input value={fields.nationality || ''}
+                        onChange={e => { setFields(p => ({ ...p, nationality: e.target.value })); markDirty() }}
+                        placeholder="z.B. Österreichisch"
+                        style={inStyle} />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Verfügbarkeit <span style={{ color: C.mid, fontWeight: 400 }}>(optional)</span></label>
+                      <select value={fields.availability || 'Ab sofort'}
+                        onChange={e => { setFields(p => ({ ...p, availability: e.target.value })); markDirty() }}
+                        style={selStyle}>
+                        <option value="Ab sofort">Ab sofort</option>
+                        <option value="In 1 Monat">In 1 Monat</option>
+                        <option value="In 2 Monaten">In 2 Monaten</option>
+                        <option value="In 3 Monaten">In 3 Monaten</option>
+                      </select>
+                    </div>
+                  </div>
                 </Section>
 
                 {/* ── Profile / Summary ── */}
@@ -1013,6 +1122,40 @@ export default function LebenslaufClient({ isPro, existingCVCount, profile, user
                       placeholder={t.skillsPlaceholder} style={{ ...inStyle, flex: 1 }} />
                     <button onClick={() => addSkill(skillInput)} style={{ ...btnPrimary(), padding: '10px 16px' }}>+</button>
                   </div>
+                  {/* Profession-based skill suggestions */}
+                  {(() => {
+                    const suggestions = getSkillSuggestions(fields.position, String(profile?.industry || ''))
+                    const filtered = suggestions.filter(s => !skillTags.includes(s))
+                    if (filtered.length === 0) return null
+                    return (
+                      <div style={{ marginTop: 12 }}>
+                        <div style={{ fontSize: 11, color: C.mid, marginBottom: 8 }}>💡 Vorschläge für dein Berufsfeld:</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                          {filtered.map(s => (
+                            <button key={s} onClick={() => addSkill(s)}
+                              style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid rgba(147,175,253,0.2)`, color: C.mid, borderRadius: 16, padding: '3px 10px', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
+                              + {s}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })()}
+                  {skillTags.length > 0 && skillTags.length < 3 && (
+                    <div style={{ marginTop: 10, fontSize: 11, color: C.amber }}>
+                      ⚠️ Bitte min. 3 Skills hinzufügen ({skillTags.length}/3)
+                    </div>
+                  )}
+                </Section>
+
+                {/* ── Zertifikate & Kurse ── */}
+                <Section title="Zertifikate & Kurse (optional)">
+                  <textarea value={fields.certifications || ''}
+                    onChange={e => { setFields(p => ({ ...p, certifications: e.target.value })); markDirty() }}
+                    rows={4}
+                    placeholder={'z.B. Erste-Hilfe-Kurs 2024\nExcel Zertifikat 2023\nGoogle Analytics Zertifikat'}
+                    style={taStyle} />
+                  <div style={{ fontSize: 11, color: C.mid, marginTop: 4 }}>Eine Zertifizierung pro Zeile · erscheint im CV wenn ausgefüllt</div>
                 </Section>
 
                 {/* ── Languages ── */}
